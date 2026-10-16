@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The shared WhatDisk library: scanning engine, view models, views and controls.
+    The platform heads (WhatDisk.Windows, WhatDisk.MacOS, WhatDisk.Linux) reference this project
+    and contribute only platform-specific services and the Avalonia backend.
+  -->
+  <PropertyGroup>
+    <RootNamespace>WhatDisk</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WhatDisk.Shared.Tests" />
+  </ItemGroup>
+</Project>

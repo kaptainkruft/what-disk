@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WhatDisk.ViewModels"
+             xmlns:controls="using:WhatDisk.Views.Controls"
+             x:Class="WhatDisk.Views.ChartPane"
+             x:DataType="vm:MainWindowViewModel">
+  <Border Classes="card">
+    <DockPanel>
+      <TextBlock DockPanel.Dock="Top" Classes="card-title" Text="{Binding Chart.Title}" TextTrimming="CharacterEllipsis" />
+      <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding Chart.Legend}" Margin="0,8,0,0">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:LegendEntryViewModel">
+            <Button Classes="legend"
+                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).SelectNodeCommand}"
+                    CommandParameter="{Binding Node}"
+                    ToolTip.Tip="{Binding Label}">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                <controls:SeriesSwatch Slot="{Binding ColorSlot}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" Classes.highlighted="{Binding IsHighlighted}" />
+                <TextBlock Grid.Column="2" Classes="number" Text="{Binding SizeText}" />
+                <TextBlock Grid.Column="3" Classes="number muted" Text="{Binding PercentText}" MinWidth="44" />
+              </Grid>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <Panel Margin="0,8,0,0">
+        <controls:PieChart x:Name="Chart"
+                           Slices="{Binding Chart.Slices}"
+                           HighlightedNode="{Binding Chart.HighlightedNode}"
+                           SliceCommand="{Binding SelectNodeCommand}"
+                           GapBrush="{DynamicResource ChartSurfaceBrush}" />
+        <TextBlock Classes="chart-total" Text="{Binding Chart.TotalText}" IsHitTestVisible="False"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <TextBlock Classes="empty-hint" Text="Nothing to chart yet" IsVisible="{Binding !Chart.HasData}" />
+      </Panel>
+    </DockPanel>
+  </Border>
+</UserControl>

@@ -1,0 +1,178 @@
+<!-- Styles for WhatDisk's views and controls, layered on top of the Fluent theme. -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:WhatDisk.Views.Controls">
+  <Styles.Resources>
+    <ControlTheme x:Key="TreeExpanderToggle" TargetType="ToggleButton">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}" CornerRadius="3">
+            <Path x:Name="Chevron"
+                  Width="16" Height="16"
+                  Data="M 6.5 4.5 L 10 8 L 6.5 11.5"
+                  Stroke="{DynamicResource TextSecondaryBrush}"
+                  StrokeThickness="1.5"
+                  StrokeLineCap="Round"
+                  StrokeJoin="Round"
+                  RenderTransformOrigin="50%,50%" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:checked /template/ Path#Chevron">
+        <Setter Property="RenderTransform" Value="rotate(90deg)" />
+      </Style>
+      <Style Selector="^:pointerover /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="ColumnGrip" TargetType="Thumb">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="SizeWestEast" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel Background="{TemplateBinding Background}">
+            <Border Width="1" Margin="0,6" HorizontalAlignment="Center" Background="{DynamicResource HairlineBrush}" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+  </Styles.Resources>
+
+  <Style Selector="Thumb.column-grip">
+    <Setter Property="Theme" Value="{StaticResource ColumnGrip}" />
+  </Style>
+
+  <!-- Window chrome -->
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource PagePlaneBrush}" />
+  </Style>
+  <Style Selector="Border.toolbar">
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+  <Style Selector="Border.statusbar">
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+  </Style>
+  <Style Selector="Border.statusbar TextBlock">
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource ChartSurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
+
+  <!-- Text -->
+  <Style Selector="TextBlock.card-title">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBlock.muted, SelectableTextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+  </Style>
+  <Style Selector="TextBlock.secondary">
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+  <Style Selector="TextBlock.small">
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="TextBlock.warning">
+    <Setter Property="Foreground" Value="{DynamicResource WarningTextBrush}" />
+  </Style>
+  <Style Selector="TextBlock.number">
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextAlignment" Value="Right" />
+  </Style>
+  <Style Selector="TextBlock.detail-label">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+  </Style>
+  <Style Selector="TextBlock.chart-total">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBlock.empty-hint">
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="TextAlignment" Value="Center" />
+  </Style>
+
+  <!-- Tree list -->
+  <Style Selector="Border.tree-header">
+    <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+  <Style Selector="Button.column-header">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+  <Style Selector="Button.column-header:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+  </Style>
+  <Style Selector="ListBox.tree">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="ScrollViewer.AllowAutoHide" Value="True" />
+  </Style>
+  <Style Selector="ListBox.tree ListBoxItem">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Height" Value="26" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="controls|TreeRowPanel.pending TextBlock.name">
+    <Setter Property="FontStyle" Value="Italic" />
+  </Style>
+  <Style Selector="controls|PercentBar">
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="controls|PercentBar.disk">
+    <Setter Property="BarBrush" Value="{DynamicResource DiskBarBrush}" />
+    <Setter Property="TrackBrush" Value="{DynamicResource DiskBarTrackBrush}" />
+  </Style>
+  <Style Selector="controls|PercentBar.parent">
+    <Setter Property="BarBrush" Value="{DynamicResource ParentBarBrush}" />
+    <Setter Property="TrackBrush" Value="{DynamicResource ParentBarTrackBrush}" />
+  </Style>
+
+  <!-- Chart legend and volume picker -->
+  <Style Selector="Button.legend, Button.volume">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="6,3" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.volume">
+    <Setter Property="Padding" Value="8,6" />
+  </Style>
+  <Style Selector="Button.legend:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.volume:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+  </Style>
+  <Style Selector="TextBlock.highlighted">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+</Styles>

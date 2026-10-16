@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The macOS head: the Avalonia native (Cocoa) backend plus macOS-specific services
+    (getattrlistbulk enumeration, volume discovery and NSWorkspace icons).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>WhatDisk</AssemblyName>
+    <RootNamespace>WhatDisk.MacOS</RootNamespace>
+    <RuntimeIdentifiers>osx-arm64;osx-x64</RuntimeIdentifiers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Publish as a Native AOT executable: faster start-up, lower memory use and a smaller bundle.
+         Use -p:PublishAot=false for a conventional (JIT) self-contained build. -->
+    <PublishAot>true</PublishAot>
+    <BundleIdentifier>com.kaptainkruft.whatdisk</BundleIdentifier>
+    <MinimumMacOSVersion>12.0</MinimumMacOSVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Native" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.HarfBuzz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WhatDisk.Shared\WhatDisk.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WhatDisk.MacOS.Tests" />
+  </ItemGroup>
+
+  <!--
+    Publishing for a macOS runtime also produces WhatDisk.app beside the published files, for example:
+      dotnet publish src/WhatDisk.MacOS -c Release -r osx-arm64
+  -->
+  <Target Name="CreateAppBundle" AfterTargets="Publish" Condition="$(RuntimeIdentifier.StartsWith('osx'))">
+    <PropertyGroup>
+      <AppBundleDirectory>$(PublishDir)$(AssemblyName).app/</AppBundleDirectory>
+      <InfoPlistLines><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>$(Product)</string>
+  <key>CFBundleDisplayName</key><string>$(Product)</string>
+  <key>CFBundleIdentifier</key><string>$(BundleIdentifier)</string>
+  <key>CFBundleExecutable</key><string>$(AssemblyName)</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$(Version)</string>
+  <key>CFBundleVersion</key><string>$(Version)</string>
+  <key>LSMinimumSystemVersion</key><string>$(MinimumMacOSVersion)</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSRequiresAquaSystemAppearance</key><false/>
+  <key>NSHumanReadableCopyright</key><string>$(Copyright)</string>
+</dict>
+</plist>]]></InfoPlistLines>
+    </PropertyGroup>
+    <ItemGroup>
+      <BundledFile Include="$(PublishDir)**/*"
+                   Exclude="$(AppBundleDirectory)**;$(PublishDir)**/*.pdb;$(PublishDir)**/*.xml;$(PublishDir)**/*.dSYM/**" />
+    </ItemGroup>
+    <RemoveDir Directories="$(AppBundleDirectory)" />
+    <Copy SourceFiles="@(BundledFile)" DestinationFiles="@(BundledFile->'$(AppBundleDirectory)Contents/MacOS/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <WriteLinesToFile File="$(AppBundleDirectory)Contents/Info.plist" Lines="$(InfoPlistLines)" Overwrite="true" />
+    <Exec Command="chmod +x &quot;$(AppBundleDirectory)Contents/MacOS/$(AssemblyName)&quot;" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+    <Exec Command="codesign --force --deep --sign - &quot;$(AppBundleDirectory)&quot;" Condition="$([MSBuild]::IsOSPlatform('OSX'))" ContinueOnError="true" />
+    <Message Importance="high" Text="$(AssemblyName) -> $(AppBundleDirectory)" />
+  </Target>
+</Project>

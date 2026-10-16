@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WhatDisk.MacOS/WhatDisk.MacOS.csproj" />
+    <Project Path="src/WhatDisk.Shared/WhatDisk.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WhatDisk.MacOS.Tests/WhatDisk.MacOS.Tests.csproj" />
+    <Project Path="tests/WhatDisk.Shared.Tests/WhatDisk.Shared.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,126 @@
+<!--
+  Built-in 16x16 vector icons, shown until (or instead of) the platform's own icons. Each drawing includes a
+  transparent 16x16 square so every icon keeps the same bounds and aspect ratio when scaled.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <DrawingImage x:Key="WhatDisk.Icon.folder">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#d99a2b" Geometry="M1.5,2.5 H6 L7.5,4 H14.5 A0.5,0.5 0 0 1 15,4.5 V13 A0.5,0.5 0 0 1 14.5,13.5 H1.5 A0.5,0.5 0 0 1 1,13 V3 A0.5,0.5 0 0 1 1.5,2.5 Z" />
+        <GeometryDrawing Brush="#f2bf4d" Geometry="M1,5.5 H15 V13 A0.5,0.5 0 0 1 14.5,13.5 H1.5 A0.5,0.5 0 0 1 1,13 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.file">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#f7f7f5" Geometry="M3.5,1.5 H9.5 L12.5,4.5 V14 A0.5,0.5 0 0 1 12,14.5 H3.5 A0.5,0.5 0 0 1 3,14 V2 A0.5,0.5 0 0 1 3.5,1.5 Z">
+          <GeometryDrawing.Pen>
+            <Pen Brush="#8d8b85" Thickness="1" />
+          </GeometryDrawing.Pen>
+        </GeometryDrawing>
+        <GeometryDrawing Brush="#d6d4ce" Geometry="M9.5,1.5 V4.5 H12.5 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.path">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#f7f7f5" Geometry="M3.5,1.5 H9.5 L12.5,4.5 V14 A0.5,0.5 0 0 1 12,14.5 H3.5 A0.5,0.5 0 0 1 3,14 V2 A0.5,0.5 0 0 1 3.5,1.5 Z">
+          <GeometryDrawing.Pen>
+            <Pen Brush="#8d8b85" Thickness="1" />
+          </GeometryDrawing.Pen>
+        </GeometryDrawing>
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.volume">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#9a9893" Geometry="M2.5,4 H13.5 A1.5,1.5 0 0 1 15,5.5 V10.5 A1.5,1.5 0 0 1 13.5,12 H2.5 A1.5,1.5 0 0 1 1,10.5 V5.5 A1.5,1.5 0 0 1 2.5,4 Z" />
+        <GeometryDrawing Brush="#c9c7c1" Geometry="M2.5,5 H13.5 A0.5,0.5 0 0 1 14,5.5 V8 H2 V5.5 A0.5,0.5 0 0 1 2.5,5 Z" />
+        <GeometryDrawing Brush="#1baf7a" Geometry="M12,9.25 A0.75,0.75 0 1 1 12,10.75 A0.75,0.75 0 1 1 12,9.25 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.removable-volume">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#9a9893" Geometry="M5,1.5 H11 V4 H5 Z" />
+        <GeometryDrawing Brush="#5f8fd0" Geometry="M4,4 H12 A1,1 0 0 1 13,5 V13.5 A1,1 0 0 1 12,14.5 H4 A1,1 0 0 1 3,13.5 V5 A1,1 0 0 1 4,4 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.network-volume">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#9a9893" Geometry="M2.5,2 H13.5 A1.5,1.5 0 0 1 15,3.5 V7.5 A1.5,1.5 0 0 1 13.5,9 H2.5 A1.5,1.5 0 0 1 1,7.5 V3.5 A1.5,1.5 0 0 1 2.5,2 Z" />
+        <GeometryDrawing Brush="#1baf7a" Geometry="M12,4.75 A0.75,0.75 0 1 1 12,6.25 A0.75,0.75 0 1 1 12,4.75 Z" />
+        <GeometryDrawing Brush="#5f8fd0" Geometry="M7.25,9 H8.75 V12 H14 V13.5 H2 V12 H7.25 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.mount-point">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#c9c7c1" Geometry="M2.5,4 H13.5 A1.5,1.5 0 0 1 15,5.5 V10.5 A1.5,1.5 0 0 1 13.5,12 H2.5 A1.5,1.5 0 0 1 1,10.5 V5.5 A1.5,1.5 0 0 1 2.5,4 Z" />
+        <GeometryDrawing Geometry="M4,8 H11 M8.5,5.5 L11,8 L8.5,10.5">
+          <GeometryDrawing.Pen>
+            <Pen Brush="#52514e" Thickness="1.5" LineCap="Round" LineJoin="Round" />
+          </GeometryDrawing.Pen>
+        </GeometryDrawing>
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.link">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#f7f7f5" Geometry="M3.5,1.5 H9.5 L12.5,4.5 V14 A0.5,0.5 0 0 1 12,14.5 H3.5 A0.5,0.5 0 0 1 3,14 V2 A0.5,0.5 0 0 1 3.5,1.5 Z">
+          <GeometryDrawing.Pen>
+            <Pen Brush="#8d8b85" Thickness="1" />
+          </GeometryDrawing.Pen>
+        </GeometryDrawing>
+        <GeometryDrawing Geometry="M5,12 C5,9 6.5,8 9.5,8 M8,6.5 L9.5,8 L8,9.5">
+          <GeometryDrawing.Pen>
+            <Pen Brush="#2a78d6" Thickness="1.3" LineCap="Round" LineJoin="Round" />
+          </GeometryDrawing.Pen>
+        </GeometryDrawing>
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.special">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#9a9893" Geometry="M8,2 A6,6 0 1 1 8,14 A6,6 0 1 1 8,2 Z M8,5.5 A2.5,2.5 0 1 0 8,10.5 A2.5,2.5 0 1 0 8,5.5 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+
+  <DrawingImage x:Key="WhatDisk.Icon.warning">
+    <DrawingImage.Drawing>
+      <DrawingGroup>
+        <GeometryDrawing Brush="Transparent" Geometry="M0,0 H16 V16 H0 Z" />
+        <GeometryDrawing Brush="#fab219" Geometry="M8,1.5 L15,14 H1 Z" />
+        <GeometryDrawing Brush="#3d2a00" Geometry="M7.25,5.5 H8.75 V10 H7.25 Z M7.25,11 H8.75 V12.5 H7.25 Z" />
+      </DrawingGroup>
+    </DrawingImage.Drawing>
+  </DrawingImage>
+</ResourceDictionary>

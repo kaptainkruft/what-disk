@@ -1,0 +1,684 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using WhatDisk.Formatting;
+using WhatDisk.Platform;
+using WhatDisk.Scanning;
+
+namespace WhatDisk.ViewModels;
+
+/// <summary>
+/// The main window: choosing what to scan, running the scan and presenting its results in the tree, chart and
+/// details panes. While a scan runs, every pane is refreshed from the live scan tree every
+/// <see cref="RefreshInterval"/>.
+/// </summary>
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
+{
+    /// <summary>Starts scans.</summary>
+    private readonly IDiskScanner _scanner;
+
+    /// <summary>Lists volumes.</summary>
+    private readonly Volumes.IVolumeService _volumeService;
+
+    /// <summary>Shows the native folder dialog.</summary>
+    private readonly IFolderPicker _folderPicker;
+
+    /// <summary>Drives the refresh timer.</summary>
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>Formats byte counts.</summary>
+    private readonly ByteSizeFormatter _sizes;
+
+    /// <summary>The current (or most recent) scan.</summary>
+    private ScanSession? _session;
+
+    /// <summary>The roots list last given to the tree, to detect newly discovered volumes.</summary>
+    private IReadOnlyList<RootNode>? _knownRoots;
+
+    /// <summary>The selection when the tree started changing its rows.</summary>
+    private TreeRowViewModel? _selectionBeforeReconcile;
+
+    /// <summary>Whether the tree is changing its rows (the view may transiently clear the selection).</summary>
+    private bool _isReconciling;
+
+    /// <summary>Whether the path text was written by the volume picker rather than typed.</summary>
+    private bool _pathFromVolumes;
+
+    /// <summary>Whether path changes are being made by the view model itself.</summary>
+    private bool _isSettingPath;
+
+    /// <summary>Incremented whenever a scan is requested, so an older request can tell it was superseded.</summary>
+    private int _scanGeneration;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainWindowViewModel"/> class.
+    /// </summary>
+    /// <param name="scanner">Starts scans.</param>
+    /// <param name="volumeService">Lists volumes.</param>
+    /// <param name="folderPicker">Shows the native folder dialog.</param>
+    /// <param name="platform">Describes platform conventions.</param>
+    /// <param name="timeProvider">Drives the refresh timer.</param>
+    public MainWindowViewModel(
+        IDiskScanner scanner,
+        Volumes.IVolumeService volumeService,
+        IFolderPicker folderPicker,
+        PlatformCapabilities platform,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(scanner);
+        ArgumentNullException.ThrowIfNull(volumeService);
+        ArgumentNullException.ThrowIfNull(folderPicker);
+        ArgumentNullException.ThrowIfNull(platform);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        _scanner = scanner;
+        _volumeService = volumeService;
+        _folderPicker = folderPicker;
+        _timeProvider = timeProvider;
+        Platform = platform;
+        _sizes = new ByteSizeFormatter(platform.ByteUnits);
+        Tree = new TreeListModel(_sizes);
+        Tree.Reconciling += OnTreeReconciling;
+        Tree.Reconciled += OnTreeReconciled;
+        Chart = new PieChartViewModel(_sizes);
+        Details = new SelectionDetailsViewModel(_sizes, platform);
+        StatusText = IdleStatus;
+    }
+
+    /// <summary>
+    /// Raised when the view should scroll a row into view, for example after a chart slice was clicked.
+    /// </summary>
+    public event EventHandler<TreeRowViewModel>? ScrollIntoViewRequested;
+
+    /// <summary>
+    /// Gets the interval between refreshes of the panes while a scan runs.
+    /// </summary>
+    public static TimeSpan RefreshInterval { get; } = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// Gets the platform conventions.
+    /// </summary>
+    public PlatformCapabilities Platform { get; }
+
+    /// <summary>
+    /// Gets the tree of results.
+    /// </summary>
+    public TreeListModel Tree { get; }
+
+    /// <summary>
+    /// Gets the pie chart pane.
+    /// </summary>
+    public PieChartViewModel Chart { get; }
+
+    /// <summary>
+    /// Gets the selection details pane.
+    /// </summary>
+    public SelectionDetailsViewModel Details { get; }
+
+    /// <summary>
+    /// Gets the volumes offered in the volume picker.
+    /// </summary>
+    public ObservableCollection<VolumeItemViewModel> Volumes { get; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether several volumes can be scanned together on this platform.
+    /// </summary>
+    public bool AllowsMultipleVolumes => Platform.SupportsMultipleVolumeSelection;
+
+    /// <summary>
+    /// Gets the hint shown in the empty path box.
+    /// </summary>
+    public string PathWatermark => Platform.PathPlaceholder;
+
+    /// <summary>
+    /// Gets a value indicating whether the native folder dialog is available.
+    /// </summary>
+    public bool CanBrowse => _folderPicker.IsSupported;
+
+    /// <summary>
+    /// Gets the current sort order of the tree.
+    /// </summary>
+    public TreeSortOrder SortOrder => Tree.SortOrder;
+
+    /// <summary>
+    /// Gets the session of the current or most recent scan.
+    /// </summary>
+    public ScanSession? Session => _session;
+
+    /// <summary>
+    /// Gets or sets the path (or network location) to scan.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartScanCommand))]
+    public partial string PathText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the selected row.
+    /// </summary>
+    [ObservableProperty]
+    public partial TreeRowViewModel? SelectedRow { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether a scan is running.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartScanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopScanCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ScanVolumeCommand))]
+    public partial bool IsScanning { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the tree has anything to show.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasResults { get; private set; }
+
+    /// <summary>
+    /// Gets the status bar summary.
+    /// </summary>
+    [ObservableProperty]
+    public partial string StatusText { get; private set; }
+
+    /// <summary>
+    /// Gets the directory currently being read, while a scan runs.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? ProgressPath { get; private set; }
+
+    /// <summary>
+    /// Gets a summary of directories that could not be read, if any.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? ErrorSummary { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the volume list is being loaded.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsLoadingVolumes { get; private set; }
+
+    /// <summary>
+    /// Gets the status shown before any scan has run.
+    /// </summary>
+    private static string IdleStatus => "Choose a volume or a folder, then press Scan.";
+
+    /// <summary>
+    /// Re-reads the live scan tree into every pane. Called by the refresh timer; safe to call at any time.
+    /// </summary>
+    public void Refresh()
+    {
+        if (_session is not { } session)
+        {
+            return;
+        }
+
+        var roots = session.Roots;
+        if (!ReferenceEquals(roots, _knownRoots))
+        {
+            var isFirst = _knownRoots is null;
+            _knownRoots = roots;
+            Tree.SetRoots(roots);
+            if (isFirst)
+            {
+                foreach (var row in Tree.RootRows.Where(static row => row.Node is RootNode { IsDiscovered: false }).ToArray())
+                {
+                    row.IsExpanded = true;
+                }
+            }
+        }
+        else
+        {
+            Tree.Refresh();
+        }
+
+        HasResults = Tree.Rows.Count > 0;
+        UpdateStatus(session);
+        UpdateChart();
+        UpdateDetails();
+    }
+
+    /// <summary>
+    /// Loads (or reloads) the volumes for the volume picker, keeping any that were checked.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels loading.</param>
+    /// <returns>A task that completes when the list has been loaded.</returns>
+    [RelayCommand]
+    public async Task LoadVolumesAsync(CancellationToken cancellationToken)
+    {
+        IsLoadingVolumes = true;
+        try
+        {
+            var volumes = await Task.Run(_volumeService.GetSelectableVolumes, cancellationToken);
+            var checkedIds = Volumes.Where(static item => item.IsChecked).Select(static item => item.Volume.Id).ToHashSet(StringComparer.Ordinal);
+            foreach (var item in Volumes)
+            {
+                item.PropertyChanged -= OnVolumeItemPropertyChanged;
+            }
+
+            Volumes.Clear();
+            foreach (var volume in volumes)
+            {
+                var item = new VolumeItemViewModel(volume, _sizes) { IsChecked = checkedIds.Contains(volume.Id) };
+                item.PropertyChanged += OnVolumeItemPropertyChanged;
+                Volumes.Add(item);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            StatusText = $"The list of volumes could not be read: {exception.Message}";
+        }
+        finally
+        {
+            IsLoadingVolumes = false;
+        }
+    }
+
+    /// <summary>
+    /// Stops the running scan, keeping the results gathered so far.
+    /// </summary>
+    public void Dispose()
+    {
+        _session?.Dispose();
+        Tree.Reconciling -= OnTreeReconciling;
+        Tree.Reconciled -= OnTreeReconciled;
+    }
+
+    /// <summary>
+    /// Starts scanning the checked volumes (where several can be selected) or the path in the path box.
+    /// </summary>
+    /// <returns>A task that completes when the scan finishes.</returns>
+    [RelayCommand(CanExecute = nameof(CanStartScan))]
+    private Task StartScanAsync() => RunScanAsync(GetTargets());
+
+    /// <summary>
+    /// Scans a single volume chosen from the volume picker.
+    /// </summary>
+    /// <param name="volume">The volume.</param>
+    /// <returns>A task that completes when the scan finishes.</returns>
+    [RelayCommand(CanExecute = nameof(CanScanVolume))]
+    private Task ScanVolumeAsync(VolumeItemViewModel? volume)
+    {
+        if (volume is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        SetPathText(volume.MountPoint, fromVolumes: false);
+        return RunScanAsync([volume.MountPoint]);
+    }
+
+    /// <summary>
+    /// Stops the running scan.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsScanning))]
+    private void StopScan() => _session?.Cancel();
+
+    /// <summary>
+    /// Lets the user choose a folder with the native dialog, then scans it.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the dialog.</param>
+    /// <returns>A task that completes when the scan finishes, or immediately if the dialog was cancelled.</returns>
+    [RelayCommand]
+    private async Task BrowseAsync(CancellationToken cancellationToken)
+    {
+        if (!_folderPicker.IsSupported)
+        {
+            return;
+        }
+
+        var folder = await _folderPicker.PickFolderAsync(cancellationToken);
+        if (string.IsNullOrEmpty(folder))
+        {
+            return;
+        }
+
+        SetPathText(folder, fromVolumes: false);
+        await RunScanAsync([folder]);
+    }
+
+    /// <summary>
+    /// Sorts the tree by a column, reversing the direction when it is already sorted by that column.
+    /// </summary>
+    /// <param name="column">The column.</param>
+    [RelayCommand]
+    private void Sort(TreeSortColumn column)
+    {
+        Tree.SortOrder = Tree.SortOrder.Toggle(column);
+        Tree.Refresh();
+        OnPropertyChanged(nameof(SortOrder));
+    }
+
+    /// <summary>
+    /// Selects a node in the tree, expanding its ancestors and scrolling it into view.
+    /// </summary>
+    /// <param name="node">The node to select.</param>
+    [RelayCommand]
+    private void SelectNode(FileSystemNode? node)
+    {
+        if (node is null)
+        {
+            return;
+        }
+
+        var target = node is PlaceholderNode { LinkedRoot: { } linked } && SelectedRow?.Node == node ? linked : node;
+        if (Tree.Reveal(target) is { } row)
+        {
+            SelectedRow = row;
+            ScrollIntoViewRequested?.Invoke(this, row);
+        }
+    }
+
+    /// <summary>
+    /// Expands or collapses a row.
+    /// </summary>
+    /// <param name="row">The row.</param>
+    [RelayCommand]
+    private static void ToggleExpansion(TreeRowViewModel? row)
+    {
+        if (row is { IsExpandable: true })
+        {
+            row.IsExpanded = !row.IsExpanded;
+        }
+    }
+
+    /// <summary>
+    /// Runs a scan of the given paths until it finishes, refreshing the panes every <see cref="RefreshInterval"/>.
+    /// </summary>
+    /// <param name="targets">The paths to scan.</param>
+    /// <returns>A task that completes when the scan finishes.</returns>
+    private async Task RunScanAsync(string[] targets)
+    {
+        if (targets.Length == 0)
+        {
+            return;
+        }
+
+        var generation = ++_scanGeneration;
+        if (_session is { IsRunning: true } previous)
+        {
+            previous.Cancel();
+            await previous.Completion;
+        }
+
+        ScanSession session;
+        try
+        {
+            // Planning reads the mount table and identifies each target, which can block on an unreachable network
+            // share, so it runs off the UI thread.
+            var request = new ScanRequest(targets, CreateOptions(targets));
+            StatusText = "Preparing to scan\u2026";
+            session = await Task.Run(() => _scanner.Start(request));
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            StatusText = $"Cannot scan “{string.Join(", ", targets)}”: {exception.Message}";
+            return;
+        }
+
+        if (generation != _scanGeneration)
+        {
+            // Another scan was requested while this one was being prepared; it takes over.
+            session.Dispose();
+            return;
+        }
+
+        _session?.Dispose();
+        _session = session;
+        _knownRoots = null;
+        SelectedRow = null;
+        Tree.Clear();
+        Chart.Clear();
+        Details.Show(null, 0, isScanRunning: true);
+        IsScanning = true;
+        Refresh();
+
+        using var refreshCancellation = new CancellationTokenSource();
+        var refreshLoop = RunRefreshLoopAsync(refreshCancellation.Token);
+        try
+        {
+            await session.Completion;
+        }
+        finally
+        {
+            await refreshCancellation.CancelAsync();
+            await refreshLoop;
+            if (ReferenceEquals(_session, session))
+            {
+                IsScanning = false;
+                Refresh();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the panes every <see cref="RefreshInterval"/> until cancelled.
+    /// </summary>
+    /// <param name="cancellationToken">Stops the loop.</param>
+    /// <returns>A task that completes when the loop stops.</returns>
+    private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(RefreshInterval, _timeProvider);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                Refresh();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The scan finished; the caller performs the final refresh.
+        }
+    }
+
+    /// <summary>
+    /// Chooses scan options for the targets: more parallelism for network locations, whose latency dominates.
+    /// </summary>
+    /// <param name="targets">The paths to scan.</param>
+    /// <returns>The options.</returns>
+    private ScanOptions CreateOptions(string[] targets)
+    {
+        var isNetwork = targets.Any(target => target.StartsWith(@"\\", StringComparison.Ordinal)
+            || Volumes.Any(volume => volume.IsNetwork && PathUtilities.IsSameOrDescendant(target, volume.MountPoint, Platform.PathComparison)));
+        return new ScanOptions { MaxDegreeOfParallelism = isNetwork ? 32 : ScanOptions.DefaultParallelism };
+    }
+
+    /// <summary>
+    /// Gets the paths the Scan button would scan.
+    /// </summary>
+    /// <returns>The checked volumes when they were chosen in the picker, otherwise the path box contents.</returns>
+    private string[] GetTargets()
+    {
+        if (AllowsMultipleVolumes && _pathFromVolumes)
+        {
+            string[] mountPoints = [.. Volumes.Where(static item => item.IsChecked).Select(static item => item.MountPoint)];
+            if (mountPoints.Length > 0)
+            {
+                return mountPoints;
+            }
+        }
+
+        var path = PathText.Trim();
+        return path.Length == 0 ? [] : [path];
+    }
+
+    /// <summary>
+    /// Determines whether the Scan button is enabled.
+    /// </summary>
+    /// <returns><see langword="true"/> when nothing is being scanned and there is something to scan.</returns>
+    private bool CanStartScan() => !IsScanning && GetTargets().Length > 0;
+
+    /// <summary>
+    /// Determines whether a volume can be scanned from the volume picker.
+    /// </summary>
+    /// <param name="volume">The volume.</param>
+    /// <returns><see langword="true"/> when nothing is being scanned.</returns>
+    private bool CanScanVolume(VolumeItemViewModel? volume) => !IsScanning && volume is not null;
+
+    /// <summary>
+    /// Sets the path box without disturbing the record of how it was set.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <param name="fromVolumes">Whether the text summarises checked volumes.</param>
+    private void SetPathText(string text, bool fromVolumes)
+    {
+        _isSettingPath = true;
+        try
+        {
+            PathText = text;
+            _pathFromVolumes = fromVolumes;
+        }
+        finally
+        {
+            _isSettingPath = false;
+        }
+    }
+
+    /// <summary>
+    /// Records that the user typed a path, so the Scan button uses it rather than the checked volumes.
+    /// </summary>
+    /// <param name="value">The new path text.</param>
+    partial void OnPathTextChanged(string value)
+    {
+        if (!_isSettingPath)
+        {
+            _pathFromVolumes = false;
+        }
+    }
+
+    /// <summary>
+    /// Updates the chart and details when the user changes the selection.
+    /// </summary>
+    /// <param name="value">The new selection.</param>
+    partial void OnSelectedRowChanged(TreeRowViewModel? value)
+    {
+        if (_isReconciling)
+        {
+            return;
+        }
+
+        UpdateChart();
+        UpdateDetails();
+    }
+
+    /// <summary>
+    /// Shows the checked volumes in the path box when a volume is checked or unchecked.
+    /// </summary>
+    /// <param name="sender">The volume item.</param>
+    /// <param name="e">The property change.</param>
+    private void OnVolumeItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(VolumeItemViewModel.IsChecked))
+        {
+            return;
+        }
+
+        var mountPoints = Volumes.Where(static item => item.IsChecked).Select(static item => item.MountPoint).ToArray();
+        SetPathText(string.Join("; ", mountPoints), fromVolumes: mountPoints.Length > 0);
+        StartScanCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Remembers the selection before the tree changes its rows.
+    /// </summary>
+    /// <param name="sender">The tree.</param>
+    /// <param name="e">Unused.</param>
+    private void OnTreeReconciling(object? sender, EventArgs e)
+    {
+        _isReconciling = true;
+        _selectionBeforeReconcile = SelectedRow;
+    }
+
+    /// <summary>
+    /// Restores the selection after the tree changed its rows. When the selected row is no longer visible (because an
+    /// ancestor was collapsed), its nearest visible ancestor is selected instead.
+    /// </summary>
+    /// <param name="sender">The tree.</param>
+    /// <param name="e">Unused.</param>
+    private void OnTreeReconciled(object? sender, EventArgs e)
+    {
+        _isReconciling = false;
+        var previous = _selectionBeforeReconcile;
+        _selectionBeforeReconcile = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        var visible = previous;
+        while (visible is not null && !Tree.Rows.Contains(visible))
+        {
+            visible = visible.Parent;
+        }
+
+        if (!ReferenceEquals(SelectedRow, visible))
+        {
+            SelectedRow = visible;
+        }
+    }
+
+    /// <summary>
+    /// Updates the status bar from the scan's progress counters.
+    /// </summary>
+    /// <param name="session">The scan.</param>
+    private void UpdateStatus(ScanSession session)
+    {
+        var statistics = session.Statistics;
+        var counts = $"{DisplayFormat.Quantity(statistics.DirectoryCount, "folder", "folders")}, " +
+            $"{DisplayFormat.Quantity(statistics.FileCount, "file", "files")}, {_sizes.Format(statistics.ByteCount)}";
+        var elapsed = DisplayFormat.Duration(session.Elapsed);
+        StatusText = session.Status switch
+        {
+            ScanStatus.Running => $"Scanning… {counts} · {elapsed}",
+            ScanStatus.Completed => $"Scanned {counts} in {elapsed}",
+            ScanStatus.Cancelled => $"Scan stopped after {elapsed}; results are incomplete · {counts}",
+            _ => $"The scan failed: {session.Failure?.Message}",
+        };
+        ErrorSummary = statistics.ErrorCount > 0
+            ? DisplayFormat.Quantity(statistics.ErrorCount, "folder could not be read", "folders could not be read")
+            : null;
+        ProgressPath = session.IsRunning ? statistics.CurrentPath : null;
+    }
+
+    /// <summary>
+    /// Charts the selected container (or the container of the selected item, or the scan roots).
+    /// </summary>
+    private void UpdateChart()
+    {
+        if (_session is not { } session)
+        {
+            Chart.Clear();
+            return;
+        }
+
+        var selected = SelectedRow?.Node;
+        switch (selected)
+        {
+            case DirectoryNode directory:
+                Chart.Update(directory.Name, directory, directory.Children, highlighted: null);
+                break;
+            case { Parent: { } parent }:
+                Chart.Update(parent.Name, parent, parent.Children, selected);
+                break;
+            default:
+                var roots = session.Roots;
+                if (roots.Count == 1)
+                {
+                    Chart.Update(roots[0].Name, roots[0], roots[0].Children, highlighted: null);
+                }
+                else
+                {
+                    Chart.Update("All scanned volumes", session, roots, highlighted: null);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Shows the selected row in the details pane.
+    /// </summary>
+    private void UpdateDetails() =>
+        Details.Show(SelectedRow?.Node, SelectedRow?.PercentOfParent ?? 0, _session?.IsRunning ?? false);
+}

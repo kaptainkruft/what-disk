@@ -1,0 +1,47 @@
+<!--
+  Chart and bar colours. Each theme variant has its own validated steps of the same eight-hue categorical palette
+  (only the first five slots are used, plus a neutral for "Other"), so dark mode is selected rather than inverted.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="ChartSeries0Brush" Color="#2a78d6" />
+      <SolidColorBrush x:Key="ChartSeries1Brush" Color="#eb6834" />
+      <SolidColorBrush x:Key="ChartSeries2Brush" Color="#1baf7a" />
+      <SolidColorBrush x:Key="ChartSeries3Brush" Color="#eda100" />
+      <SolidColorBrush x:Key="ChartSeries4Brush" Color="#e87ba4" />
+      <SolidColorBrush x:Key="ChartOtherBrush" Color="#898781" />
+      <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#fcfcfb" />
+      <SolidColorBrush x:Key="PagePlaneBrush" Color="#f9f9f7" />
+      <SolidColorBrush x:Key="DiskBarBrush" Color="#2a78d6" />
+      <SolidColorBrush x:Key="DiskBarTrackBrush" Color="#332a78d6" />
+      <SolidColorBrush x:Key="ParentBarBrush" Color="#eb6834" />
+      <SolidColorBrush x:Key="ParentBarTrackBrush" Color="#33eb6834" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#52514e" />
+      <SolidColorBrush x:Key="TextMutedBrush" Color="#898781" />
+      <SolidColorBrush x:Key="HairlineBrush" Color="#e1e0d9" />
+      <SolidColorBrush x:Key="SubtleHoverBrush" Color="#14000000" />
+      <SolidColorBrush x:Key="WarningTextBrush" Color="#b35c00" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="ChartSeries0Brush" Color="#3987e5" />
+      <SolidColorBrush x:Key="ChartSeries1Brush" Color="#d95926" />
+      <SolidColorBrush x:Key="ChartSeries2Brush" Color="#199e70" />
+      <SolidColorBrush x:Key="ChartSeries3Brush" Color="#c98500" />
+      <SolidColorBrush x:Key="ChartSeries4Brush" Color="#d55181" />
+      <SolidColorBrush x:Key="ChartOtherBrush" Color="#898781" />
+      <SolidColorBrush x:Key="ChartSurfaceBrush" Color="#1a1a19" />
+      <SolidColorBrush x:Key="PagePlaneBrush" Color="#121211" />
+      <SolidColorBrush x:Key="DiskBarBrush" Color="#3987e5" />
+      <SolidColorBrush x:Key="DiskBarTrackBrush" Color="#333987e5" />
+      <SolidColorBrush x:Key="ParentBarBrush" Color="#d95926" />
+      <SolidColorBrush x:Key="ParentBarTrackBrush" Color="#33d95926" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#c3c2b7" />
+      <SolidColorBrush x:Key="TextMutedBrush" Color="#898781" />
+      <SolidColorBrush x:Key="HairlineBrush" Color="#2c2c2a" />
+      <SolidColorBrush x:Key="SubtleHoverBrush" Color="#1fffffff" />
+      <SolidColorBrush x:Key="WarningTextBrush" Color="#fab219" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

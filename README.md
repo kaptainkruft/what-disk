@@ -11,7 +11,8 @@ iteration (see [Roadmap](#roadmap)).
 ## Features
 
 - **One window, four areas.** A toolbar to choose what to scan, the results tree (about 80% of the width), and a right
-  pane split into a pie chart (top) and the details of the selected item (bottom). A status bar shows progress.
+  pane split into a pie chart of file types (top) and the details of the selected item (bottom). A status bar shows
+  progress.
 - **Choose what to scan.** Pick a volume from the **Volumes** menu (one at a time on macOS), type a path (`~` is
   expanded), or use **Browse…** for the system folder dialog. Mounted network shares appear in the volume list and can
   be scanned like any folder. A path given on the command line is scanned on start-up.
@@ -30,9 +31,11 @@ iteration (see [Roadmap](#roadmap)).
   (`/dev`, autofs, snapshots) are skipped.
 - **Robust.** Unreadable or vanished folders are recorded and the scan carries on; the scan can be stopped at any time
   and the partial results stay on screen.
-- **Pie chart.** A donut of the five largest items plus "other", in a colour-blind-safe palette with separate light and
-  dark variants. Colours stay with an item while the scan reorders things. Hover a slice for its value; click a slice or
-  a legend entry to select that item in the tree.
+- **File types.** A donut chart of the five file types (by extension) taking the most space in the selected folder and
+  everything beneath it, plus "other". With nothing selected it covers the whole scan. On macOS, packages such as
+  `.app` bundles and Photos libraries count as one item of their own type, and types are described the way the Finder
+  describes them ("PDF document"). Selecting a file highlights its type. The palette is colour-blind safe, with
+  separate light and dark variants, and colours stay with a type while the scan changes the ranking.
 - **Light and dark themes**, following the system setting.
 
 ## Requirements
@@ -92,7 +95,7 @@ what-disk/
 │   │   ├── Volumes/              Volume and mount-table model, file-system classification, portable volume service
 │   │   ├── Platform/             Contracts a platform head implements (icons, folder picker, capabilities)
 │   │   │                         and path helpers
-│   │   ├── Charting/             Pie chart model: top items, "other", stable colours
+│   │   ├── Charting/             File-type totals and the pie chart model: top types, "other", stable colours
 │   │   ├── Formatting/           Byte sizes, percentages, counts, durations and timestamps
 │   │   ├── ViewModels/           MVVM view models: main window, tree rows and their minimal-change
 │   │   │                         reconciliation, chart, details and volume picker
@@ -109,6 +112,7 @@ what-disk/
 │       ├── MacVolumeService.cs          Mounted volumes with names, physical devices and mount flags
 │       ├── MacVolumeFacts.cs            Decodes and classifies volume attributes (pure code)
 │       ├── MacIconProvider.cs           Finder icons through NSWorkspace
+│       ├── MacFileTypeProvider.cs       Packages and file type descriptions (uniform type identifiers)
 │       ├── MacPlatformServiceCollectionExtensions.cs   Registers the macOS services
 │       └── Interop/              libc and Objective-C runtime bindings, errno mapping, constants
 └── tests/
@@ -130,6 +134,7 @@ the operating system:
 | `IFileSystemEnumerator` | Read one directory's entries | `MacFileSystemEnumerator` (`getattrlistbulk`) |
 | `IVolumeService` | List volumes and capture the mount table | `MacVolumeService` (`DriveInfo` + `getattrlist`) |
 | `IIconProvider` | Platform icons for items and volumes | `MacIconProvider` (`NSWorkspace`) |
+| `IFileTypeProvider` | Which folders are single items (packages) and how types are described | `MacFileTypeProvider` (uniform type identifiers) |
 | `PlatformCapabilities` | Conventions: one or several volumes per scan, path comparison, byte units | macOS values |
 
 The head registers these with `Microsoft.Extensions.DependencyInjection` before the shared defaults, which only fill in
@@ -162,9 +167,10 @@ on macOS), so each head ships only the native code it needs.
   selection survives reordering.
 - The tree list is built from a `ListBox`, a custom row panel and a column layout shared with the header. Avalonia's
   `TreeDataGrid` requires a commercial licence from version 12, so it is not used.
-- The pie chart follows a validated data-visualisation palette: at most five named slices plus "other", colours that
-  stay with their item, slices drawn in colour-slot order so neighbouring colours are always a tested pair, 2 px gaps
-  between slices, a legend, tooltips and separate light and dark colours.
+- The pie chart totals file sizes by type on a background thread; totals of large completed folders are cached, so
+  charting stays cheap on huge trees. It follows a validated data-visualisation palette: at most five named slices plus
+  "other", colours that stay with their type, slices drawn in colour-slot order so neighbouring colours are always a
+  tested pair, 2 px gaps between slices, a legend, tooltips and separate light and dark colours.
 
 ### macOS specifics
 
@@ -200,7 +206,7 @@ System.IO enumeration reports 29 GB because it cannot see allocation or recognis
 
 ## Testing
 
-`dotnet test` runs 201 tests across two projects.
+`dotnet test` runs 215 tests across two projects.
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.

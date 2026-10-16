@@ -81,8 +81,10 @@ public sealed class MainWindowViewModelTests : IDisposable
         Assert.Equal(["Test Disk", "photos", "music", "notes.txt"], rows.Select(static row => row.Name));
         Assert.True(rows[0].IsExpanded);
         Assert.Equal(0.46, rows[0].PercentOfDisk, precision: 9);
-        Assert.Equal("Test Disk", ViewModel.Chart.Title);
-        Assert.Equal(["photos", "music", "notes.txt"], ViewModel.Chart.Legend.Select(static entry => entry.Label));
+        await ViewModel.WaitForChartAsync();
+        Assert.Equal("File types in Test Disk", ViewModel.Chart.Title);
+        Assert.Equal([".jpg", ".mp3", ".txt"], ViewModel.Chart.Legend.Select(static entry => entry.Label));
+        Assert.Equal("4.60 KB", ViewModel.Chart.TotalText);
         Assert.StartsWith("Scanned 3 folders, 4 files", ViewModel.StatusText, StringComparison.Ordinal);
         Assert.Null(ViewModel.ErrorSummary);
         Assert.False(ViewModel.Details.HasSelection);
@@ -146,7 +148,8 @@ public sealed class MainWindowViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// Selecting a folder charts it and shows its details; selecting a file charts its folder and highlights it.
+    /// Selecting a folder charts its file types and shows its details; selecting a file charts its folder and
+    /// highlights the file's type.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
     [Fact]
@@ -157,15 +160,19 @@ public sealed class MainWindowViewModelTests : IDisposable
         var photos = ViewModel.Tree.Rows[1];
 
         ViewModel.SelectedRow = photos;
-        Assert.Equal("photos", ViewModel.Chart.Title);
+        await ViewModel.WaitForChartAsync();
+        Assert.Equal("File types in photos", ViewModel.Chart.Title);
+        Assert.Equal([".jpg"], ViewModel.Chart.Legend.Select(static entry => entry.Label));
         Assert.Equal("photos", ViewModel.Details.Title);
         Assert.True(ViewModel.Details.HasSelection);
 
         photos.IsExpanded = true;
         var file = ViewModel.Tree.Rows.Single(static row => row.Name == "a.jpg");
         ViewModel.SelectedRow = file;
-        Assert.Equal("photos", ViewModel.Chart.Title);
-        Assert.Same(file.Node, ViewModel.Chart.HighlightedNode);
+        await ViewModel.WaitForChartAsync();
+        Assert.Equal("File types in photos", ViewModel.Chart.Title);
+        Assert.Equal(".jpg", ViewModel.Chart.HighlightedKey);
+        Assert.True(ViewModel.Chart.Legend[0].IsHighlighted);
         Assert.Equal("File", ViewModel.Details.Subtitle);
     }
 
@@ -242,7 +249,8 @@ public sealed class MainWindowViewModelTests : IDisposable
         await ViewModel.StartScanCommand.ExecuteAsync(null);
 
         Assert.Equal([_fs.PathOf("photos"), _fs.PathOf("music")], ViewModel.Session!.Roots.Select(static root => root.RootPath));
-        Assert.Equal("All scanned volumes", ViewModel.Chart.Title);
+        await ViewModel.WaitForChartAsync();
+        Assert.Equal("File types in all scanned volumes", ViewModel.Chart.Title);
     }
 
     /// <summary>

@@ -104,6 +104,14 @@ internal static unsafe partial class ObjectiveC
     internal static partial void AutoreleasePoolPop(nint pool);
 
     /// <summary>
+    /// Copies an <c>NSString</c> into a managed string.
+    /// </summary>
+    /// <param name="value">The <c>NSString</c>, or zero.</param>
+    /// <returns>The string, or <see langword="null"/> for zero.</returns>
+    internal static string? ToManagedString(nint value) =>
+        value == 0 ? null : Marshal.PtrToStringUTF8(Send(value, Selector("UTF8String")));
+
+    /// <summary>
     /// Creates an autoreleased <c>NSString</c>.
     /// </summary>
     /// <param name="value">The string.</param>

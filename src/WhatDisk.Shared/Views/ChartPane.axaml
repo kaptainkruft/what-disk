@@ -10,10 +10,7 @@
       <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding Chart.Legend}" Margin="0,8,0,0">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:LegendEntryViewModel">
-            <Button Classes="legend"
-                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).SelectNodeCommand}"
-                    CommandParameter="{Binding Node}"
-                    ToolTip.Tip="{Binding Label}">
+            <Border Classes="legend" ToolTip.Tip="{Binding Description}">
               <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                 <controls:SeriesSwatch Slot="{Binding ColorSlot}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
@@ -21,15 +18,14 @@
                 <TextBlock Grid.Column="2" Classes="number" Text="{Binding SizeText}" />
                 <TextBlock Grid.Column="3" Classes="number muted" Text="{Binding PercentText}" MinWidth="44" />
               </Grid>
-            </Button>
+            </Border>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
       <Panel Margin="0,8,0,0">
         <controls:PieChart x:Name="Chart"
                            Slices="{Binding Chart.Slices}"
-                           HighlightedNode="{Binding Chart.HighlightedNode}"
-                           SliceCommand="{Binding SelectNodeCommand}"
+                           HighlightedKey="{Binding Chart.HighlightedKey}"
                            GapBrush="{DynamicResource ChartSurfaceBrush}" />
         <TextBlock Classes="chart-total" Text="{Binding Chart.TotalText}" IsHitTestVisible="False"
                    HorizontalAlignment="Center" VerticalAlignment="Center" />

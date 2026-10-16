@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 
 namespace WhatDisk.Views;
 
@@ -20,9 +21,12 @@ public partial class VolumePicker : UserControl
     public event EventHandler? VolumeChosen;
 
     /// <summary>
-    /// Signals that a scan was started from the picker.
+    /// Signals that a scan was started from the picker. The signal is posted rather than raised at once: the button
+    /// runs its command only after its Click handlers return, and closing the flyout first would detach the button
+    /// and clear its command binding, so the scan would never start.
     /// </summary>
     /// <param name="sender">The button.</param>
     /// <param name="e">Unused.</param>
-    private void OnVolumeButtonClick(object? sender, RoutedEventArgs e) => VolumeChosen?.Invoke(this, EventArgs.Empty);
+    private void OnVolumeButtonClick(object? sender, RoutedEventArgs e) =>
+        Dispatcher.UIThread.Post(() => VolumeChosen?.Invoke(this, EventArgs.Empty));
 }

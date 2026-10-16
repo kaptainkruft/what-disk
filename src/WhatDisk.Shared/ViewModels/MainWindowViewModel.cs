@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using WhatDisk.Charting;
 using WhatDisk.Formatting;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
@@ -29,6 +31,27 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>Formats byte counts.</summary>
     private readonly ByteSizeFormatter _sizes;
+
+    /// <summary>Describes file types and identifies packages.</summary>
+    private readonly IFileTypeProvider _fileTypes;
+
+    /// <summary>Totals file sizes by type for the chart.</summary>
+    private readonly FileTypeAggregator _fileTypeTotals;
+
+    /// <summary>The chart computation in progress, or the last one.</summary>
+    private Task _chartUpdate = Task.CompletedTask;
+
+    /// <summary>Guards <see cref="_chartBusy"/> and <see cref="_chartUpdatePending"/>.</summary>
+    private readonly Lock _chartGate = new();
+
+    /// <summary>Whether a chart computation is running.</summary>
+    private bool _chartBusy;
+
+    /// <summary>Whether the chart must be recomputed when the computation in progress finishes.</summary>
+    private bool _chartUpdatePending;
+
+    /// <summary>What the chart last showed, and whether the scan had finished by then.</summary>
+    private (object? Scope, bool IsFinal) _chartedScope;
 
     /// <summary>The current (or most recent) scan.</summary>
     private ScanSession? _session;
@@ -59,12 +82,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <param name="folderPicker">Shows the native folder dialog.</param>
     /// <param name="platform">Describes platform conventions.</param>
     /// <param name="timeProvider">Drives the refresh timer.</param>
+    /// <param name="fileTypes">Describes file types; <see langword="null"/> for extensions without platform knowledge.</param>
     public MainWindowViewModel(
         IDiskScanner scanner,
         Volumes.IVolumeService volumeService,
         IFolderPicker folderPicker,
         PlatformCapabilities platform,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IFileTypeProvider? fileTypes = null)
     {
         ArgumentNullException.ThrowIfNull(scanner);
         ArgumentNullException.ThrowIfNull(volumeService);
@@ -78,6 +103,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _timeProvider = timeProvider;
         Platform = platform;
         _sizes = new ByteSizeFormatter(platform.ByteUnits);
+        _fileTypes = fileTypes ?? new DefaultFileTypeProvider();
+        _fileTypeTotals = new FileTypeAggregator(_fileTypes);
         Tree = new TreeListModel(_sizes);
         Tree.Reconciling += OnTreeReconciling;
         Tree.Reconciled += OnTreeReconciled;
@@ -642,37 +669,128 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Charts the selected container (or the container of the selected item, or the scan roots).
+    /// Waits until the chart reflects the latest request. Used by tests; the UI never waits.
+    /// </summary>
+    /// <returns>A task that completes when no chart computation is running or pending.</returns>
+    internal async Task WaitForChartAsync()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref _chartUpdate);
+            await current;
+            lock (_chartGate)
+            {
+                if (!_chartBusy && !_chartUpdatePending && ReferenceEquals(current, _chartUpdate))
+                {
+                    return;
+                }
+            }
+
+            await Task.Yield();
+        }
+    }
+
+    /// <summary>
+    /// Charts the file types in the selected folder (or the folder of the selected item, or every scan root),
+    /// highlighting the type of the selected file. The totals are computed off the UI thread; when a computation is
+    /// already running, another one follows as soon as it finishes.
     /// </summary>
     private void UpdateChart()
     {
         if (_session is not { } session)
         {
+            _chartedScope = default;
             Chart.Clear();
             return;
         }
 
+        var (title, scope, nodes, highlight) = DescribeChartScope(session);
+        if (_chartedScope is { IsFinal: true } charted && ReferenceEquals(charted.Scope, scope) && !session.IsRunning)
+        {
+            // Nothing in a finished scan changes any more; only the highlighted type can differ.
+            Chart.Highlight(highlight);
+            return;
+        }
+
+        lock (_chartGate)
+        {
+            if (_chartBusy)
+            {
+                _chartUpdatePending = true;
+                return;
+            }
+
+            _chartBusy = true;
+        }
+
+        _chartUpdate = UpdateChartAsync(title, scope, nodes, highlight, isFinal: !session.IsRunning);
+    }
+
+    /// <summary>
+    /// Computes the file-type totals on a background thread and shows them.
+    /// </summary>
+    /// <param name="title">The chart title.</param>
+    /// <param name="scope">Identifies what is charted.</param>
+    /// <param name="nodes">The nodes whose files are totalled.</param>
+    /// <param name="highlight">The type to highlight, if any.</param>
+    /// <param name="isFinal">Whether the scan had finished, so the result cannot change.</param>
+    /// <returns>A task that completes when the chart has been updated.</returns>
+    private async Task UpdateChartAsync(string title, object scope, IReadOnlyList<FileSystemNode> nodes, string? highlight, bool isFinal)
+    {
+        try
+        {
+            var items = await Task.Run(() => _fileTypeTotals.Aggregate(nodes)
+                .Select(total => new ChartItem(total.Key, FileTypes.Label(total.Key), _fileTypes.Describe(total.Key), total.Value))
+                .ToArray());
+            Chart.Update(title, scope, items, highlight);
+            _chartedScope = (scope, isFinal);
+        }
+#pragma warning disable CA1031 // The chart is best effort; a failure must not break the scan or the window.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            Trace.TraceWarning("Could not chart file types: {0}", exception.Message);
+        }
+
+        bool again;
+        lock (_chartGate)
+        {
+            again = _chartUpdatePending;
+            _chartUpdatePending = false;
+            _chartBusy = false;
+        }
+
+        if (again)
+        {
+            UpdateChart();
+        }
+    }
+
+    /// <summary>
+    /// Works out what the chart shows for the current selection.
+    /// </summary>
+    /// <param name="session">The scan.</param>
+    /// <returns>The title, an object identifying the scope, the nodes to total and the type to highlight.</returns>
+    private (string Title, object Scope, IReadOnlyList<FileSystemNode> Nodes, string? Highlight) DescribeChartScope(ScanSession session)
+    {
         var selected = SelectedRow?.Node;
         switch (selected)
         {
-            case DirectoryNode directory:
-                Chart.Update(directory.Name, directory, directory.Children, highlighted: null);
-                break;
+            case DirectoryNode directory when directory is RootNode || _fileTypes.GetPackageType(directory) is null:
+                return ($"File types in {directory.Name}", directory, [directory], null);
             case { Parent: { } parent }:
-                Chart.Update(parent.Name, parent, parent.Children, selected);
-                break;
+                var highlight = selected switch
+                {
+                    FileNode { Kind: NodeKind.File } file => FileTypes.FromName(file.Name),
+                    DirectoryNode package => _fileTypes.GetPackageType(package),
+                    _ => null,
+                };
+                return ($"File types in {parent.Name}", parent, [parent], highlight);
             default:
                 var roots = session.Roots;
-                if (roots.Count == 1)
-                {
-                    Chart.Update(roots[0].Name, roots[0], roots[0].Children, highlighted: null);
-                }
-                else
-                {
-                    Chart.Update("All scanned volumes", session, roots, highlighted: null);
-                }
-
-                break;
+                return roots.Count == 1
+                    ? ($"File types in {roots[0].Name}", roots[0], [roots[0]], null)
+                    : ("File types in all scanned volumes", session, roots, null);
         }
     }
 

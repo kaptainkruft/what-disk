@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using WhatDisk.MacOS.Interop;
@@ -18,14 +17,6 @@ internal sealed unsafe class MacIconProvider : DefaultIconProvider
     /// <summary><c>NSBitmapImageFileTypePNG</c>.</summary>
     private const nuint PngFileType = 4;
 
-    /// <summary>Directory extensions that macOS presents as packages with their own icons.</summary>
-    private static readonly FrozenSet<string> BundleExtensions = FrozenSet.Create(
-        StringComparer.OrdinalIgnoreCase,
-        ".app", ".appex", ".bundle", ".framework", ".plugin", ".kext", ".prefpane", ".qlgenerator", ".saver", ".xpc",
-        ".mdimporter", ".photoslibrary", ".musiclibrary", ".tvlibrary", ".imovielibrary", ".fcpbundle", ".logicx",
-        ".band", ".pkg", ".mpkg", ".xcodeproj", ".xcworkspace", ".playground", ".rtfd", ".pages", ".numbers", ".key",
-        ".scptd", ".docarchive", ".photolibrary", ".aplibrary", ".theater");
-
     /// <summary>Folder names that have special Finder icons in the home directory or at the root.</summary>
     private static readonly FrozenSet<string> SpecialFolders = FrozenSet.Create(
         StringComparer.Ordinal,
@@ -33,14 +24,14 @@ internal sealed unsafe class MacIconProvider : DefaultIconProvider
         "Public", "Sites", "System", "Users");
 
     /// <summary>Whether AppKit and UniformTypeIdentifiers could be loaded.</summary>
-    private static readonly bool IsAvailable = LoadFrameworks();
+    private static readonly bool IsAvailable = MacFrameworks.Load();
 
     /// <inheritdoc/>
     public override IconKey GetKey(FileSystemNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
         if (node is DirectoryNode and not RootNode
-            && (BundleExtensions.Contains(Path.GetExtension(node.Name)) || SpecialFolders.Contains(node.Name)))
+            && (MacPackages.IsPackageName(node.Name) || SpecialFolders.Contains(node.Name)))
         {
             return new IconKey(IconKey.PathCategory, node.FullPath);
         }
@@ -75,25 +66,6 @@ internal sealed unsafe class MacIconProvider : DefaultIconProvider
         finally
         {
             ObjectiveC.AutoreleasePoolPop(pool);
-        }
-    }
-
-    /// <summary>
-    /// Loads AppKit (for <c>NSWorkspace</c>) and UniformTypeIdentifiers (for <c>UTType</c>).
-    /// </summary>
-    /// <returns><see langword="true"/> when both frameworks are available.</returns>
-    private static bool LoadFrameworks()
-    {
-        try
-        {
-            NativeLibrary.Load("/System/Library/Frameworks/AppKit.framework/AppKit");
-            NativeLibrary.Load("/System/Library/Frameworks/UniformTypeIdentifiers.framework/UniformTypeIdentifiers");
-            return ObjectiveC.GetClass("NSWorkspace") != 0 && ObjectiveC.GetClass("UTType") != 0;
-        }
-        catch (DllNotFoundException exception)
-        {
-            Trace.TraceWarning("macOS icons are unavailable: {0}", exception.Message);
-            return false;
         }
     }
 

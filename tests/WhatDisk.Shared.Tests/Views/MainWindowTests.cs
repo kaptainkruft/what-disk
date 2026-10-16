@@ -78,6 +78,7 @@ public sealed class MainWindowTests
         var (window, viewModel) = await ShowScannedWindowAsync();
 
         viewModel.SelectedRow = viewModel.Tree.Rows.First(static row => row.Name == "Projects");
+        await viewModel.WaitForChartAsync();
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
 
@@ -96,11 +97,13 @@ public sealed class MainWindowTests
         var fs = new FakeFileSystem();
         var random = new Random(3);
         string[] folders = ["Projects", "Photos", "Music", "Movies", "Downloads", "Documents", "Library", "Archive"];
+        string[] extensions = [".mov", ".jpg", ".mp3", ".zip", ".pdf", ".dmg", ".json", ".heic", ".m4a", ".docx"];
         for (var index = 0; index < folders.Length; index++)
         {
             for (var file = 0; file < 6; file++)
             {
-                fs.File($"{folders[index]}/item{file}.bin", random.Next(1, 40) * (index + 1) * 50_000_000L, allocatedSize: FileSystemEntryInfo.UnknownSize);
+                var extension = extensions[(index + file) % extensions.Length];
+                fs.File($"{folders[index]}/item{file}{extension}", random.Next(1, 40) * (index + 1) * 50_000_000L, allocatedSize: FileSystemEntryInfo.UnknownSize);
             }
         }
 
@@ -124,6 +127,7 @@ public sealed class MainWindowTests
             PathText = fs.Root,
         };
         await viewModel.StartScanCommand.ExecuteAsync(null);
+        await viewModel.WaitForChartAsync();
 
         var window = new MainWindow { Width = 1280, Height = 800, DataContext = viewModel };
         window.Show();

@@ -37,6 +37,7 @@ internal static class MacPlatformServiceCollectionExtensions
         services.AddSingleton<IFileSystemEnumerator>(static _ => MacFileSystemEnumerator.CreateOrFallback());
         services.AddSingleton<IVolumeService, MacVolumeService>();
         services.AddSingleton<IIconProvider, MacIconProvider>();
+        services.AddSingleton<IFileTypeProvider, MacFileTypeProvider>();
         return services;
     }
 }

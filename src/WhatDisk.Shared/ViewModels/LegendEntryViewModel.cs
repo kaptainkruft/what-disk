@@ -1,6 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using WhatDisk.Charting;
-using WhatDisk.Scanning;
 
 namespace WhatDisk.ViewModels;
 
@@ -34,13 +33,19 @@ public sealed partial class LegendEntryViewModel : ObservableObject
     public partial string PercentText { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Gets the item the slice represents, or <see langword="null"/> for "Other".
+    /// Gets a longer description of the slice, shown as a tooltip.
     /// </summary>
     [ObservableProperty]
-    public partial FileSystemNode? Node { get; private set; }
+    public partial string Description { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Gets a value indicating whether the entry belongs to the selected item.
+    /// Gets the key of the item the slice represents, or <see langword="null"/> for "other".
+    /// </summary>
+    [ObservableProperty]
+    public partial string? Key { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the entry belongs to the type of the selected item.
     /// </summary>
     [ObservableProperty]
     public partial bool IsHighlighted { get; private set; }
@@ -51,14 +56,21 @@ public sealed partial class LegendEntryViewModel : ObservableObject
     /// <param name="slice">The slice.</param>
     /// <param name="sizeText">The formatted size.</param>
     /// <param name="percentText">The formatted share.</param>
-    /// <param name="isHighlighted">Whether the slice belongs to the selected item.</param>
+    /// <param name="isHighlighted">Whether the slice belongs to the type of the selected item.</param>
     internal void Update(PieSlice slice, string sizeText, string percentText, bool isHighlighted)
     {
         ColorSlot = slice.ColorSlot;
         Label = slice.Label;
         SizeText = sizeText;
         PercentText = percentText;
-        Node = slice.Node;
+        Description = slice.Description;
+        Key = slice.Key;
         IsHighlighted = isHighlighted;
     }
+
+    /// <summary>
+    /// Marks the entry as belonging (or not) to the type of the selected item.
+    /// </summary>
+    /// <param name="isHighlighted">Whether to highlight the entry.</param>
+    internal void SetHighlighted(bool isHighlighted) => IsHighlighted = isHighlighted;
 }

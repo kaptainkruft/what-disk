@@ -28,6 +28,7 @@ public static class WhatDiskServiceCollectionExtensions
         services.TryAddSingleton<IFileSystemEnumerator, ManagedFileSystemEnumerator>();
         services.TryAddSingleton<IVolumeService>(static _ => new PortableVolumeService());
         services.TryAddSingleton<IIconProvider, DefaultIconProvider>();
+        services.TryAddSingleton<IFileTypeProvider, DefaultFileTypeProvider>();
         services.TryAddSingleton<IDiskScanner, DiskScanner>();
         services.TryAddSingleton<IconCache>();
         services.TryAddSingleton(static _ => new MainWindow());

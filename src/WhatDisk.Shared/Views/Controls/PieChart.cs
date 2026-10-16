@@ -1,17 +1,15 @@
-using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using WhatDisk.Scanning;
 using WhatDisk.ViewModels;
 
 namespace WhatDisk.Views.Controls;
 
 /// <summary>
 /// A donut chart of <see cref="ChartSlice"/> values. Slices are separated by a thin gap in the surface colour; the
-/// hovered or selected slice is lifted outwards, shows its value in a tooltip and can be clicked.
+/// hovered or highlighted slice is lifted outwards, and hovering shows its value in a tooltip.
 /// </summary>
 public sealed class PieChart : Control
 {
@@ -22,16 +20,10 @@ public sealed class PieChart : Control
         AvaloniaProperty.Register<PieChart, IReadOnlyList<ChartSlice>?>(nameof(Slices));
 
     /// <summary>
-    /// Identifies the <see cref="HighlightedNode"/> property.
+    /// Identifies the <see cref="HighlightedKey"/> property.
     /// </summary>
-    public static readonly StyledProperty<FileSystemNode?> HighlightedNodeProperty =
-        AvaloniaProperty.Register<PieChart, FileSystemNode?>(nameof(HighlightedNode));
-
-    /// <summary>
-    /// Identifies the <see cref="SliceCommand"/> property.
-    /// </summary>
-    public static readonly StyledProperty<ICommand?> SliceCommandProperty =
-        AvaloniaProperty.Register<PieChart, ICommand?>(nameof(SliceCommand));
+    public static readonly StyledProperty<string?> HighlightedKeyProperty =
+        AvaloniaProperty.Register<PieChart, string?>(nameof(HighlightedKey));
 
     /// <summary>
     /// Identifies the <see cref="GapBrush"/> property.
@@ -58,7 +50,7 @@ public sealed class PieChart : Control
     /// Initializes static members of the <see cref="PieChart"/> class.
     /// </summary>
     static PieChart() =>
-        AffectsRender<PieChart>(SlicesProperty, HighlightedNodeProperty, GapBrushProperty, InnerRadiusRatioProperty);
+        AffectsRender<PieChart>(SlicesProperty, HighlightedKeyProperty, GapBrushProperty, InnerRadiusRatioProperty);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PieChart"/> class.
@@ -75,21 +67,12 @@ public sealed class PieChart : Control
     }
 
     /// <summary>
-    /// Gets or sets the node whose slice is lifted, typically the selected item.
+    /// Gets or sets the key of the slice that is lifted, such as the type of the selected file.
     /// </summary>
-    public FileSystemNode? HighlightedNode
+    public string? HighlightedKey
     {
-        get => GetValue(HighlightedNodeProperty);
-        set => SetValue(HighlightedNodeProperty, value);
-    }
-
-    /// <summary>
-    /// Gets or sets the command executed with a slice's node when the slice is clicked.
-    /// </summary>
-    public ICommand? SliceCommand
-    {
-        get => GetValue(SliceCommandProperty);
-        set => SetValue(SliceCommandProperty, value);
+        get => GetValue(HighlightedKeyProperty);
+        set => SetValue(HighlightedKeyProperty, value);
     }
 
     /// <summary>
@@ -168,11 +151,11 @@ public sealed class PieChart : Control
             return;
         }
 
-        var highlighted = HighlightedNode;
+        var highlighted = HighlightedKey;
         for (var index = 0; index < slices.Count; index++)
         {
             var slice = slices[index].Slice;
-            var lifted = index == _hoveredIndex || (highlighted is not null && ReferenceEquals(slice.Node, highlighted));
+            var lifted = index == _hoveredIndex || (highlighted is not null && slice.Key == highlighted);
             var geometry = CreateSector(center, inner, lifted ? outer + Lift : outer, slice.StartAngle, slice.SweepAngle);
             context.DrawGeometry(ChartBrushes.ForSlot(this, slice.ColorSlot), null, geometry);
         }
@@ -223,7 +206,6 @@ public sealed class PieChart : Control
 
         _hoveredIndex = index;
         ToolTip.SetTip(this, index >= 0 ? CreateToolTip(Slices![index]) : null);
-        Cursor = index >= 0 && Slices![index].Slice.Node is not null ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
         InvalidateVisual();
     }
 
@@ -234,25 +216,6 @@ public sealed class PieChart : Control
         _hoveredIndex = -1;
         ToolTip.SetTip(this, null);
         InvalidateVisual();
-    }
-
-    /// <inheritdoc/>
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
-            || Slices is not { Count: > 0 } slices
-            || !TryGetGeometry(out var center, out var inner, out var outer))
-        {
-            return;
-        }
-
-        var index = HitTest(slices, center, inner, outer + Lift, e.GetPosition(this));
-        if (index >= 0 && slices[index].Slice.Node is { } node && SliceCommand is { } command && command.CanExecute(node))
-        {
-            command.Execute(node);
-            e.Handled = true;
-        }
     }
 
     /// <summary>
@@ -302,7 +265,7 @@ public sealed class PieChart : Control
     }
 
     /// <summary>
-    /// Creates the tooltip for a slice: the value first and prominent, the name second.
+    /// Creates the tooltip for a slice: the value first and prominent, then the type and its description.
     /// </summary>
     /// <param name="slice">The slice.</param>
     /// <returns>The tooltip content.</returns>
@@ -311,6 +274,10 @@ public sealed class PieChart : Control
         var panel = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Left };
         panel.Children.Add(new TextBlock { Text = $"{slice.SizeText} · {slice.PercentText}", FontWeight = FontWeight.SemiBold });
         panel.Children.Add(new TextBlock { Text = slice.Slice.Label, Opacity = 0.8, MaxWidth = 280, TextWrapping = TextWrapping.Wrap });
+        if (!string.IsNullOrEmpty(slice.Slice.Description))
+        {
+            panel.Children.Add(new TextBlock { Text = slice.Slice.Description, Opacity = 0.8, MaxWidth = 280, TextWrapping = TextWrapping.Wrap });
+        }
         return panel;
     }
 

@@ -34,16 +34,35 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      # Each project is run on its own so that its report has a fixed, unique name (reports from projects run together
+      # are named by timestamp and can overwrite each other). Every project runs even if an earlier one fails.
       - name: Test
         env:
           VERSION_PREFIX: ${{ inputs.version-prefix }}
           VERSION_SUFFIX: ${{ inputs.version-suffix }}
-        run: >
-          dotnet test --configuration Release
-          "-p:VersionPrefix=$VERSION_PREFIX"
-          "-p:VersionSuffix=$VERSION_SUFFIX"
-          --results-directory "$GITHUB_WORKSPACE/test-results"
-          --report-xunit-trx
+        run: |
+          status=0
+          for project in tests/*/*.csproj; do
+            name="$(basename "$project" .csproj)"
+            echo "::group::$name"
+            dotnet test --project "$project" --configuration Release \
+              "-p:VersionPrefix=$VERSION_PREFIX" "-p:VersionSuffix=$VERSION_SUFFIX" \
+              --results-directory "$GITHUB_WORKSPACE/test-results" \
+              --report-xunit-trx --report-xunit-trx-filename "$name.trx" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+      - name: Summary
+        if: always()
+        run: |
+          for report in test-results/*.trx; do
+            [[ -f "$report" ]] || continue
+            counters="$(grep -o '<Counters [^>]*>' "$report" | head -n 1)"
+            total="$(sed -nE 's/.* total="([0-9]+)".*/\1/p' <<<"$counters")"
+            passed="$(sed -nE 's/.* passed="([0-9]+)".*/\1/p' <<<"$counters")"
+            failed="$(sed -nE 's/.* failed="([0-9]+)".*/\1/p' <<<"$counters")"
+            echo "- $(basename "$report" .trx): $passed of $total passed, $failed failed" >>"$GITHUB_STEP_SUMMARY"
+          done
       - uses: actions/upload-artifact@v7
         if: always()
         with:

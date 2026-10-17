@@ -94,6 +94,12 @@ public sealed partial class TreeRowViewModel : ObservableObject
     public partial bool IsExpanded { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether items being dragged would be dropped into this row's folder.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsDropTarget { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether the row can have children.
     /// </summary>
     [ObservableProperty]

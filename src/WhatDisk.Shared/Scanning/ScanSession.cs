@@ -61,6 +61,9 @@ public sealed class ScanSession : IDisposable
     /// <summary>The unexpected failure that stopped the scan, if any.</summary>
     private Exception? _failure;
 
+    /// <summary>Whether volumes found beneath the scanned paths may become new top-level roots.</summary>
+    private bool _allowNewRoots = true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ScanSession"/> class. Call <see cref="Start"/> to begin.
     /// </summary>
@@ -95,6 +98,12 @@ public sealed class ScanSession : IDisposable
 
         StartedAt = timeProvider.GetUtcNow();
     }
+
+    /// <summary>
+    /// Gets the directory scanned into an existing tree, for a session created by
+    /// <see cref="DiskScanner.StartInto"/>; otherwise <see langword="null"/>.
+    /// </summary>
+    public DirectoryNode? GraftedDirectory { get; private set; }
 
     /// <summary>
     /// Gets what is being scanned.
@@ -185,13 +194,38 @@ public sealed class ScanSession : IDisposable
     public void Dispose() => Cancel();
 
     /// <summary>
+    /// Scans one directory into an existing tree instead of scanning roots. Volumes mounted beneath it link to the
+    /// existing roots that cover them; no new roots are created.
+    /// </summary>
+    /// <param name="directory">The empty directory node, already inserted into its parent.</param>
+    /// <param name="path">The directory's path.</param>
+    /// <param name="knownRoots">The roots of the tree being added to.</param>
+    internal void StartInto(DirectoryNode directory, string path, IEnumerable<RootNode> knownRoots)
+    {
+        GraftedDirectory = directory;
+        _allowNewRoots = false;
+        foreach (var root in knownRoots.Where(static root => root.IsVolumeRoot))
+        {
+            _fullRoots.TryAdd(root.Volume.Id, root);
+        }
+
+        StartWorkers([new WorkItem(directory, path)]);
+    }
+
+    /// <summary>
     /// Queues the roots and starts the worker threads.
     /// </summary>
-    internal void Start()
+    internal void Start() => StartWorkers(_roots.Select(static root => new WorkItem(root, root.RootPath)));
+
+    /// <summary>
+    /// Queues the initial work and starts the worker threads.
+    /// </summary>
+    /// <param name="work">The directories to read first.</param>
+    private void StartWorkers(IEnumerable<WorkItem> work)
     {
-        foreach (var root in _roots)
+        foreach (var item in work)
         {
-            _queue.Add(new WorkItem(root, root.RootPath));
+            _queue.Add(item);
         }
 
         _queue.CompleteIfIdle();
@@ -336,6 +370,10 @@ public sealed class ScanSession : IDisposable
                 case BoundaryAction.Skip:
                     Statistics.RecordSkipped();
                     return new PlaceholderNode(entry.Name, parent, decision.Reason, decision.Volume, decision.LinkedRoot);
+
+                case BoundaryAction.NewRoot when !_allowNewRoots:
+                    Statistics.RecordSkipped();
+                    return new PlaceholderNode(entry.Name, parent, SkipReason.SeparateVolume, decision.Volume, null);
 
                 case BoundaryAction.NewRoot:
                     Statistics.RecordSkipped();

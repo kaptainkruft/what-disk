@@ -81,6 +81,50 @@ internal static unsafe partial class ObjectiveC
     internal static partial nint Send(nint receiver, nint selector, byte* utf8);
 
     /// <summary>
+    /// Sends a message with two object arguments that returns an object.
+    /// </summary>
+    /// <param name="receiver">The receiver.</param>
+    /// <param name="selector">The selector.</param>
+    /// <param name="first">The first argument.</param>
+    /// <param name="second">The second argument.</param>
+    /// <returns>The result.</returns>
+    [LibraryImport(Library, EntryPoint = "objc_msgSend")]
+    internal static partial nint Send(nint receiver, nint selector, nint first, nint second);
+
+    /// <summary>
+    /// Sends a message with an unsigned integer argument that returns an object.
+    /// </summary>
+    /// <param name="receiver">The receiver.</param>
+    /// <param name="selector">The selector.</param>
+    /// <param name="value">The argument.</param>
+    /// <returns>The result.</returns>
+    [LibraryImport(Library, EntryPoint = "objc_msgSend")]
+    internal static partial nint Send(nint receiver, nint selector, nuint value);
+
+    /// <summary>
+    /// Sends a message with an object and two out-pointers that returns a <c>BOOL</c>.
+    /// </summary>
+    /// <param name="receiver">The receiver.</param>
+    /// <param name="selector">The selector.</param>
+    /// <param name="argument">The object argument.</param>
+    /// <param name="first">The first out-pointer.</param>
+    /// <param name="second">The second out-pointer.</param>
+    /// <returns>The result (non-zero for YES).</returns>
+    [LibraryImport(Library, EntryPoint = "objc_msgSend")]
+    internal static partial byte SendForBool(nint receiver, nint selector, nint argument, nint* first, nint* second);
+
+    /// <summary>
+    /// Sends a message with two object arguments that returns a <c>BOOL</c>.
+    /// </summary>
+    /// <param name="receiver">The receiver.</param>
+    /// <param name="selector">The selector.</param>
+    /// <param name="first">The first argument.</param>
+    /// <param name="second">The second argument.</param>
+    /// <returns>The result (non-zero for YES).</returns>
+    [LibraryImport(Library, EntryPoint = "objc_msgSend")]
+    internal static partial byte SendForBool(nint receiver, nint selector, nint first, nint second);
+
+    /// <summary>
     /// Sends a message with no arguments that returns an unsigned integer.
     /// </summary>
     /// <param name="receiver">The receiver.</param>
@@ -102,6 +146,30 @@ internal static unsafe partial class ObjectiveC
     /// <param name="pool">The token from <see cref="AutoreleasePoolPush"/>.</param>
     [LibraryImport(Library, EntryPoint = "objc_autoreleasePoolPop")]
     internal static partial void AutoreleasePoolPop(nint pool);
+
+    /// <summary>
+    /// Creates an autoreleased file <c>NSURL</c> for a path.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <returns>The URL.</returns>
+    internal static nint CreateFileUrl(string path) =>
+        Send(GetClass("NSURL"), Selector("fileURLWithPath:"), CreateString(path));
+
+    /// <summary>
+    /// Creates an autoreleased <c>NSArray</c> of file URLs.
+    /// </summary>
+    /// <param name="paths">The paths.</param>
+    /// <returns>The array.</returns>
+    internal static nint CreateFileUrlArray(IEnumerable<string> paths)
+    {
+        var array = Send(GetClass("NSMutableArray"), Selector("array"));
+        foreach (var path in paths)
+        {
+            _ = Send(array, Selector("addObject:"), CreateFileUrl(path));
+        }
+
+        return array;
+    }
 
     /// <summary>
     /// Copies an <c>NSString</c> into a managed string.

@@ -13,12 +13,13 @@
              Grid.Row="1"
              Classes="tree"
              ItemsSource="{Binding Tree.Rows}"
-             SelectedItem="{Binding SelectedRow}"
-             SelectionMode="Single"
-             AutoScrollToSelectedItem="False">
+             Selection="{Binding Selection}"
+             SelectionMode="Multiple"
+             AutoScrollToSelectedItem="False"
+             DragDrop.AllowDrop="True">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:TreeRowViewModel">
-          <controls:TreeRowPanel Classes.pending="{Binding IsPending}">
+          <controls:TreeRowPanel Classes.pending="{Binding IsPending}" Classes.drop-target="{Binding IsDropTarget}">
             <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" VerticalAlignment="Center">
               <Border Width="{Binding IndentWidth}" />
               <Panel Grid.Column="1" Width="18">

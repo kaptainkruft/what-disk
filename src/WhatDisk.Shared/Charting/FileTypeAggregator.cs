@@ -48,6 +48,19 @@ public sealed class FileTypeAggregator(IFileTypeProvider fileTypes)
     }
 
     /// <summary>
+    /// Forgets the cached totals of a directory and its ancestors, after items beneath it were added or removed.
+    /// </summary>
+    /// <param name="directory">The directory whose contents changed.</param>
+    public void Invalidate(DirectoryNode directory)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        for (DirectoryNode? current = directory; current is not null; current = current.Parent)
+        {
+            _completed.Remove(current);
+        }
+    }
+
+    /// <summary>
     /// Adds a size to a type's total.
     /// </summary>
     /// <param name="totals">The totals.</param>

@@ -23,6 +23,8 @@
       <SolidColorBrush x:Key="HairlineBrush" Color="#e1e0d9" />
       <SolidColorBrush x:Key="SubtleHoverBrush" Color="#14000000" />
       <SolidColorBrush x:Key="WarningTextBrush" Color="#b35c00" />
+      <SolidColorBrush x:Key="DangerTextBrush" Color="#c4322b" />
+      <SolidColorBrush x:Key="DropTargetBrush" Color="#382a78d6" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="ChartSeries0Brush" Color="#3987e5" />
@@ -42,6 +44,8 @@
       <SolidColorBrush x:Key="HairlineBrush" Color="#2c2c2a" />
       <SolidColorBrush x:Key="SubtleHoverBrush" Color="#1fffffff" />
       <SolidColorBrush x:Key="WarningTextBrush" Color="#fab219" />
+      <SolidColorBrush x:Key="DangerTextBrush" Color="#ff6b62" />
+      <SolidColorBrush x:Key="DropTargetBrush" Color="#4a3987e5" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

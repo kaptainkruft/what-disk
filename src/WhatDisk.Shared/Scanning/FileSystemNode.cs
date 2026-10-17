@@ -27,9 +27,10 @@ public abstract class FileSystemNode
     public string Name { get; }
 
     /// <summary>
-    /// Gets the directory that contains this node, or <see langword="null"/> for a root.
+    /// Gets the directory that contains this node, or <see langword="null"/> for a root. It changes only when an
+    /// item is moved within its volume after the scan has finished.
     /// </summary>
-    public DirectoryNode? Parent { get; }
+    public DirectoryNode? Parent { get; internal set; }
 
     /// <summary>
     /// Gets the kind of node.

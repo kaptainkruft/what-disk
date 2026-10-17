@@ -112,6 +112,57 @@ public class DirectoryNode : FileSystemNode
     public NodeError? Error => Volatile.Read(ref _error);
 
     /// <summary>
+    /// Gets a value indicating whether completing this directory stops there instead of completing its ancestors.
+    /// Set for a directory scanned into an existing, already complete tree (a copy or a rescan).
+    /// </summary>
+    internal bool IsCompletionBoundary { get; init; }
+
+    /// <summary>
+    /// Gets how much a node contributes to its parent's totals.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The counted size, logical size, files and directories the node adds to its parent.</returns>
+    internal static (long Size, long LogicalSize, long Files, long Directories) ContributionOf(FileSystemNode node) => node switch
+    {
+        DirectoryNode directory => (directory.Size, directory.LogicalSize, directory.FileCount, directory.DirectoryCount + 1),
+        FileNode file => (file.Size, file.IsHardLinkDuplicate ? 0 : file.LogicalSize, 1, 0),
+        _ => (0, 0, 0, 0),
+    };
+
+    /// <summary>
+    /// Adds a child and its totals. Only for use after the directory has been read (on the UI thread).
+    /// </summary>
+    /// <param name="child">The child, whose <see cref="FileSystemNode.Parent"/> must already be this directory.</param>
+    internal void InsertChild(FileSystemNode child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        Volatile.Write(ref _children, [.. Volatile.Read(ref _children) ?? [], child]);
+        var (size, logical, files, directories) = ContributionOf(child);
+        AddToTotals(size, logical, files, directories);
+    }
+
+    /// <summary>
+    /// Removes a child and subtracts its totals. Only for use after the directory has been read (on the UI thread).
+    /// </summary>
+    /// <param name="child">The child to remove.</param>
+    /// <returns><see langword="true"/> when the child was found.</returns>
+    internal bool RemoveChild(FileSystemNode child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        var current = Volatile.Read(ref _children) ?? [];
+        var index = Array.IndexOf(current, child);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        Volatile.Write(ref _children, [.. current[..index], .. current[(index + 1)..]]);
+        var (size, logical, files, directories) = ContributionOf(child);
+        AddToTotals(-size, -logical, -files, -directories);
+        return true;
+    }
+
+    /// <summary>
     /// Records a failure to read the directory.
     /// </summary>
     /// <param name="error">The failure.</param>
@@ -192,6 +243,10 @@ public class DirectoryNode : FileSystemNode
             }
 
             Volatile.Write(ref node._state, StateComplete);
+            if (node.IsCompletionBoundary)
+            {
+                return;
+            }
         }
     }
 }

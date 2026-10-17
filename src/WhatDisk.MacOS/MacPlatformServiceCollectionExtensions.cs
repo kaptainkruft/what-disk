@@ -38,6 +38,7 @@ internal static class MacPlatformServiceCollectionExtensions
         services.AddSingleton<IVolumeService, MacVolumeService>();
         services.AddSingleton<IIconProvider, MacIconProvider>();
         services.AddSingleton<IFileTypeProvider, MacFileTypeProvider>();
+        services.AddSingleton<IShellService, MacShellService>();
         return services;
     }
 }

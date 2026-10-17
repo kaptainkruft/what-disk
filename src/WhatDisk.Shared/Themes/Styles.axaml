@@ -143,6 +143,9 @@
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     <Setter Property="VerticalContentAlignment" Value="Stretch" />
   </Style>
+  <Style Selector="controls|TreeRowPanel.drop-target">
+    <Setter Property="Background" Value="{DynamicResource DropTargetBrush}" />
+  </Style>
   <Style Selector="controls|TreeRowPanel.pending TextBlock.name">
     <Setter Property="FontStyle" Value="Italic" />
   </Style>
@@ -172,6 +175,9 @@
   </Style>
   <Style Selector="Button.volume:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+  </Style>
+  <Style Selector="Button.danger">
+    <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}" />
   </Style>
   <Style Selector="TextBlock.highlighted">
     <Setter Property="FontWeight" Value="SemiBold" />

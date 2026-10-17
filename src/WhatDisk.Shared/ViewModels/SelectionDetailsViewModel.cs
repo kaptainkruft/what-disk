@@ -73,6 +73,27 @@ public sealed partial class SelectionDetailsViewModel(ByteSizeFormatter sizes, P
     }
 
     /// <summary>
+    /// Shows a summary of several selected items.
+    /// </summary>
+    /// <param name="nodes">The selected nodes.</param>
+    public void ShowSummary(IReadOnlyList<FileSystemNode> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        Node = null;
+        HasSelection = nodes.Count > 0;
+        Title = DisplayFormat.Quantity(nodes.Count, "item", "items");
+        Subtitle = "Selection";
+        var topmost = nodes.Where(node => !node.SelfAndAncestors.Skip(1).Any(ancestor => nodes.Contains(ancestor))).ToArray();
+        Apply(
+        [
+            ("Size on disk", _sizes.Format(topmost.Sum(static node => node.Size))),
+            ("Logical size", _sizes.Format(topmost.Sum(static node => node.LogicalSize))),
+            ("Files", DisplayFormat.Count(topmost.Sum(static node => node.FileCount))),
+            ("Folders", DisplayFormat.Count(topmost.Sum(static node => node is DirectoryNode directory ? directory.DirectoryCount + 1 : 0))),
+        ]);
+    }
+
+    /// <summary>
     /// Describes the kind of a node in words.
     /// </summary>
     /// <param name="node">The node.</param>

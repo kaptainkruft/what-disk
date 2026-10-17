@@ -29,10 +29,12 @@ public static class WhatDiskServiceCollectionExtensions
         services.TryAddSingleton<IVolumeService>(static _ => new PortableVolumeService());
         services.TryAddSingleton<IIconProvider, DefaultIconProvider>();
         services.TryAddSingleton<IFileTypeProvider, DefaultFileTypeProvider>();
+        services.TryAddSingleton<IShellService, DefaultShellService>();
         services.TryAddSingleton<IDiskScanner, DiskScanner>();
         services.TryAddSingleton<IconCache>();
         services.TryAddSingleton(static _ => new MainWindow());
         services.TryAddSingleton<IFolderPicker>(static provider => new TopLevelFolderPicker(provider.GetRequiredService<MainWindow>));
+        services.TryAddSingleton<IDialogService>(static provider => new WindowDialogService(provider.GetRequiredService<MainWindow>));
         services.TryAddSingleton<MainWindowViewModel>();
         return services;
     }

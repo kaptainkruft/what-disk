@@ -151,6 +151,53 @@ public sealed class TreeListModel(ByteSizeFormatter sizes) : ITreeRowOwner
     }
 
     /// <summary>
+    /// Finds the position of a row in <see cref="Rows"/>.
+    /// </summary>
+    /// <param name="row">The row.</param>
+    /// <returns>The index, or -1 when the row is not visible.</returns>
+    public int IndexOf(TreeRowViewModel row) => _rows.IndexOf(row);
+
+    /// <summary>
+    /// Expands or collapses a row and every folder beneath it, then refreshes.
+    /// </summary>
+    /// <param name="row">The row.</param>
+    /// <param name="expanded">Whether to expand (or collapse).</param>
+    public void SetSubtreeExpanded(TreeRowViewModel row, bool expanded)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        _suspendExpansionCallbacks = true;
+        try
+        {
+            Visit(row);
+        }
+        finally
+        {
+            _suspendExpansionCallbacks = false;
+        }
+
+        Refresh();
+
+        void Visit(TreeRowViewModel current)
+        {
+            if (current.Node is not DirectoryNode)
+            {
+                return;
+            }
+
+            current.IsExpanded = expanded;
+            if (expanded)
+            {
+                _ = SyncChildren(current);
+            }
+
+            foreach (var child in current.ChildRows ?? [])
+            {
+                Visit(child);
+            }
+        }
+    }
+
+    /// <summary>
     /// Finds the visible row of a node.
     /// </summary>
     /// <param name="node">The node.</param>

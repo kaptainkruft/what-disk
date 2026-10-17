@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using Avalonia.Controls.Selection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WhatDisk.Charting;
+using WhatDisk.FileOperations;
 using WhatDisk.Formatting;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
@@ -59,8 +61,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>The roots list last given to the tree, to detect newly discovered volumes.</summary>
     private IReadOnlyList<RootNode>? _knownRoots;
 
-    /// <summary>The selection when the tree started changing its rows.</summary>
-    private TreeRowViewModel? _selectionBeforeReconcile;
+    /// <summary>The selected rows when the tree started changing its rows.</summary>
+    private List<TreeRowViewModel> _selectionBeforeReconcile = [];
 
     /// <summary>Whether the tree is changing its rows (the view may transiently clear the selection).</summary>
     private bool _isReconciling;
@@ -83,13 +85,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <param name="platform">Describes platform conventions.</param>
     /// <param name="timeProvider">Drives the refresh timer.</param>
     /// <param name="fileTypes">Describes file types; <see langword="null"/> for extensions without platform knowledge.</param>
+    /// <param name="shell">The file manager's actions; <see langword="null"/> for opening only.</param>
+    /// <param name="dialogs">Asks the user to confirm and resolve conflicts; <see langword="null"/> declines everything.</param>
+    /// <param name="enumerator">Describes items added to the tree; <see langword="null"/> for the portable enumerator.</param>
     public MainWindowViewModel(
         IDiskScanner scanner,
         Volumes.IVolumeService volumeService,
         IFolderPicker folderPicker,
         PlatformCapabilities platform,
         TimeProvider timeProvider,
-        IFileTypeProvider? fileTypes = null)
+        IFileTypeProvider? fileTypes = null,
+        IShellService? shell = null,
+        IDialogService? dialogs = null,
+        IFileSystemEnumerator? enumerator = null)
     {
         ArgumentNullException.ThrowIfNull(scanner);
         ArgumentNullException.ThrowIfNull(volumeService);
@@ -105,9 +113,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _sizes = new ByteSizeFormatter(platform.ByteUnits);
         _fileTypes = fileTypes ?? new DefaultFileTypeProvider();
         _fileTypeTotals = new FileTypeAggregator(_fileTypes);
+        _shell = shell ?? new DefaultShellService();
+        _dialogs = dialogs ?? new DecliningDialogService();
+        _enumerator = enumerator ?? new ManagedFileSystemEnumerator();
+        _transfer = new FileTransfer(platform.PathComparison);
         Tree = new TreeListModel(_sizes);
         Tree.Reconciling += OnTreeReconciling;
         Tree.Reconciled += OnTreeReconciled;
+        Selection = new SelectionModel<TreeRowViewModel> { SingleSelect = false, Source = Tree.Rows };
+        Selection.SelectionChanged += OnSelectionChanged;
         Chart = new PieChartViewModel(_sizes);
         Details = new SelectionDetailsViewModel(_sizes, platform);
         StatusText = IdleStatus;
@@ -186,10 +200,39 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public partial string PathText { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the selected row.
+    /// Gets the selected rows; the list binds to it, and several rows can be selected.
     /// </summary>
-    [ObservableProperty]
-    public partial TreeRowViewModel? SelectedRow { get; set; }
+    public SelectionModel<TreeRowViewModel> Selection { get; }
+
+    /// <summary>
+    /// Gets or sets the primary selected row (the first of the selection). Setting it selects only that row.
+    /// </summary>
+    public TreeRowViewModel? SelectedRow
+    {
+        get => Selection.SelectedItem;
+        set
+        {
+            if (ReferenceEquals(value, Selection.SelectedItem) && Selection.Count <= 1)
+            {
+                return;
+            }
+
+            using (Selection.BatchUpdate())
+            {
+                Selection.Clear();
+                if (value is not null && Tree.IndexOf(value) is var index and >= 0)
+                {
+                    Selection.Select(index);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets every selected row, in display order.
+    /// </summary>
+    public IReadOnlyList<TreeRowViewModel> SelectedRows =>
+        [.. Selection.SelectedIndexes.Order().Where(index => index < Tree.Rows.Count).Select(index => Tree.Rows[index])];
 
     /// <summary>
     /// Gets a value indicating whether a scan is running.
@@ -199,6 +242,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(StopScanCommand))]
     [NotifyCanExecuteChangedFor(nameof(ScanVolumeCommand))]
     public partial bool IsScanning { get; private set; }
+
+    /// <summary>
+    /// Re-evaluates the item commands when scanning starts or stops.
+    /// </summary>
+    /// <param name="value">Whether a scan is running.</param>
+    partial void OnIsScanningChanged(bool value) => NotifyItemCommands();
 
     /// <summary>
     /// Gets a value indicating whether the tree has anything to show.
@@ -265,7 +314,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         HasResults = Tree.Rows.Count > 0;
-        UpdateStatus(session);
+        if (!IsOperationRunning)
+        {
+            UpdateStatus(session);
+        }
+
         UpdateChart();
         UpdateDetails();
     }
@@ -346,10 +399,20 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Stops the running scan.
+    /// Stops the running scan or file operation.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(IsScanning))]
-    private void StopScan() => _session?.Cancel();
+    [RelayCommand(CanExecute = nameof(CanStop))]
+    private void StopScan()
+    {
+        _session?.Cancel();
+        _operationCancellation?.Cancel();
+    }
+
+    /// <summary>
+    /// Determines whether the Stop button is enabled.
+    /// </summary>
+    /// <returns><see langword="true"/> while a scan or file operation runs.</returns>
+    private bool CanStop() => IsScanning || IsOperationRunning;
 
     /// <summary>
     /// Lets the user choose a folder with the native dialog, then scans it.
@@ -609,18 +672,28 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Updates the chart and details when the user changes the selection.
+    /// Updates the chart, details and commands when the user changes the selection.
     /// </summary>
-    /// <param name="value">The new selection.</param>
-    partial void OnSelectedRowChanged(TreeRowViewModel? value)
+    /// <param name="sender">The selection.</param>
+    /// <param name="e">The change.</param>
+    private void OnSelectionChanged(object? sender, SelectionModelSelectionChangedEventArgs<TreeRowViewModel> e)
     {
-        if (_isReconciling)
+        if (!_isReconciling)
         {
-            return;
+            OnSelectionUpdated();
         }
+    }
 
+    /// <summary>
+    /// Brings everything that depends on the selection up to date.
+    /// </summary>
+    private void OnSelectionUpdated()
+    {
+        OnPropertyChanged(nameof(SelectedRow));
+        OnPropertyChanged(nameof(SelectedRows));
         UpdateChart();
         UpdateDetails();
+        NotifyItemCommands();
     }
 
     /// <summary>
@@ -648,34 +721,69 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private void OnTreeReconciling(object? sender, EventArgs e)
     {
         _isReconciling = true;
-        _selectionBeforeReconcile = SelectedRow;
+        _selectionBeforeReconcile = [.. Selection.SelectedItems.OfType<TreeRowViewModel>()];
     }
 
     /// <summary>
-    /// Restores the selection after the tree changed its rows. When the selected row is no longer visible (because an
-    /// ancestor was collapsed), its nearest visible ancestor is selected instead.
+    /// Restores the selection after the tree changed its rows (moved rows lose their selection in the list). A
+    /// selected row that is no longer visible, because an ancestor was collapsed or it was deleted, is replaced by its
+    /// nearest visible ancestor.
     /// </summary>
     /// <param name="sender">The tree.</param>
     /// <param name="e">Unused.</param>
     private void OnTreeReconciled(object? sender, EventArgs e)
     {
-        _isReconciling = false;
         var previous = _selectionBeforeReconcile;
-        _selectionBeforeReconcile = null;
-        if (previous is null)
+        _selectionBeforeReconcile = [];
+        try
         {
-            return;
-        }
+            if (previous.Count == 0)
+            {
+                return;
+            }
 
-        var visible = previous;
-        while (visible is not null && !Tree.Rows.Contains(visible))
-        {
-            visible = visible.Parent;
-        }
+            var indexes = new Dictionary<TreeRowViewModel, int>(Tree.Rows.Count, ReferenceEqualityComparer.Instance);
+            for (var index = 0; index < Tree.Rows.Count; index++)
+            {
+                indexes[Tree.Rows[index]] = index;
+            }
 
-        if (!ReferenceEquals(SelectedRow, visible))
+            var wanted = new List<int>(previous.Count);
+            foreach (var row in previous)
+            {
+                var visible = row;
+                while (visible is not null && !indexes.ContainsKey(visible))
+                {
+                    visible = visible.Parent;
+                }
+
+                if (visible is not null && !wanted.Contains(indexes[visible]))
+                {
+                    wanted.Add(indexes[visible]);
+                }
+            }
+
+            if (!wanted.Order().SequenceEqual(Selection.SelectedIndexes.Order()))
+            {
+                using (Selection.BatchUpdate())
+                {
+                    Selection.Clear();
+                    foreach (var index in wanted)
+                    {
+                        Selection.Select(index);
+                    }
+                }
+            }
+
+            if (wanted.Count != previous.Count || !wanted.Select(index => Tree.Rows[index]).All(row => previous.Contains(row)))
+            {
+                _isReconciling = false;
+                OnSelectionUpdated();
+            }
+        }
+        finally
         {
-            SelectedRow = visible;
+            _isReconciling = false;
         }
     }
 
@@ -831,6 +939,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Shows the selected row in the details pane.
     /// </summary>
-    private void UpdateDetails() =>
+    private void UpdateDetails()
+    {
+        var rows = Selection.SelectedItems;
+        if (rows.Count > 1)
+        {
+            Details.ShowSummary([.. rows.OfType<TreeRowViewModel>().Select(static row => row.Node)]);
+            return;
+        }
+
         Details.Show(SelectedRow?.Node, SelectedRow?.PercentOfParent ?? 0, _session?.IsRunning ?? false);
+    }
 }

@@ -58,6 +58,23 @@ internal sealed unsafe class MacFileSystemEnumerator : IFileSystemEnumerator
     public string GetCanonicalPath(string path) => PathUtilities.ResolveLinks(path);
 
     /// <inheritdoc/>
+    public FileSystemEntryInfo? GetEntry(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        var request = AttributeBufferParser.BulkRequest;
+        const int Size = 4096;
+        var buffer = stackalloc byte[Size];
+        if (LibC.GetAttrList(path, &request, buffer, Size, Options | AttributeConstants.OptionNoFollow) != 0)
+        {
+            return null;
+        }
+
+        var entries = new List<FileSystemEntryInfo>(1);
+        AttributeBufferParser.ParseEntries(new ReadOnlySpan<byte>(buffer, Size), 1, entries);
+        return entries.Count == 1 ? entries[0] : null;
+    }
+
+    /// <inheritdoc/>
     public FileIdentity ReadDirectory(string path, ICollection<FileSystemEntryInfo> entries, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);

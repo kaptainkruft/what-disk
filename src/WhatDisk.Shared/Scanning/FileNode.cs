@@ -41,6 +41,23 @@ public sealed class FileNode : FileSystemNode
         IsHardLinkDuplicate = isHardLinkDuplicate;
     }
 
+    /// <summary>
+    /// Creates the node for an item added to a finished tree, such as a file that was just copied there.
+    /// </summary>
+    /// <param name="parent">The containing directory.</param>
+    /// <param name="entry">The item, as described by the enumerator.</param>
+    /// <returns>The node; it is not yet inserted into <paramref name="parent"/>.</returns>
+    internal static FileNode FromEntry(DirectoryNode parent, in FileSystemEntryInfo entry)
+    {
+        var kind = entry.Type switch
+        {
+            EntryType.File => NodeKind.File,
+            EntryType.SymbolicLink => NodeKind.SymbolicLink,
+            _ => NodeKind.Special,
+        };
+        return new FileNode(entry.Name, parent, kind, entry.EffectiveSize, Math.Max(0, entry.LogicalSize), entry.LastWriteTimeUtc, entry.Attributes, false);
+    }
+
     /// <inheritdoc/>
     public override NodeKind Kind { get; }
 

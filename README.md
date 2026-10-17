@@ -37,6 +37,58 @@ iteration (see [Roadmap](#roadmap)).
   describes them ("PDF document"). Selecting a file highlights its type. The palette is colour-blind safe, with
   separate light and dark variants, and colours stay with a type while the scan changes the ranking.
 - **Light and dark themes**, following the system setting.
+- **Work with what you find.** Select several items, then open, preview, reveal, copy, rescan, move to the Trash or
+  delete them from a context menu, the menu bar or the keyboard. Drag items onto another folder to move or copy them.
+  See [Working with items](#working-with-items).
+
+## Working with items
+
+**Selecting.** Click a row to select it. Command-click adds or removes a row, Shift-click selects a range, Shift with
+the Up or Down arrow extends the selection, and ⌘A selects every visible row. Right-clicking a row that is not selected
+selects it first. When the selection contains a folder and items inside it, actions apply to the folder only. With
+several items selected, the details pane shows their combined size and counts.
+
+**Context menu and menu bar.** Right-click the selection, or press Shift+F10, for the context menu. The same actions
+are in the **File**, **Edit** and **View** menus. They are enabled only while the tree has keyboard focus, so ⌘C, ⌘A
+and ⌘⌫ still work as usual in the path box.
+
+| Action | Shortcut | What it does |
+|---|---|---|
+| Open | ⌘O or ⌘↓ | Opens the items with their default applications |
+| Open With | | Lists the applications that can open the item, the default first |
+| Show in Finder | ⌘R | Reveals the items in a Finder window |
+| Quick Look | Space (⌘Y in the menu bar) | Previews the items; press again to close the preview |
+| Get Info | ⌘I | Opens the Finder's information window for each item |
+| Copy | ⌘C | Copies the items, ready to paste in the Finder |
+| Copy Path | ⌥⌘C | Copies the full paths as text, one per line |
+| Select All | ⌘A | Selects every visible row |
+| Expand All Beneath | ⌥→ | Expands the selected folders and every folder inside them |
+| Collapse All Beneath | ⌥← | Collapses the selected folders and every folder inside them |
+| Rescan | ⇧⌘R | Reads the selected folders again; a top-level item rescans everything |
+| Move to Trash | ⌘⌫ | Moves the items to the Trash |
+| Delete Immediately… | ⌥⌘⌫ | Deletes the items permanently |
+
+The arrow keys work as before: Up and Down move, Right expands or moves to the first child, Left collapses or moves to
+the parent. Return does nothing in the tree.
+
+**Deleting.** Both kinds of delete ask first when the selection holds more than 10 MB or more than 10 files. Smaller
+deletions happen straight away. There is no undo, but items moved to the Trash can be restored from it. Top-level
+items, other volumes shown inside a folder and items on read-only volumes cannot be moved or deleted.
+
+**Drag and drop.** Drag the selection onto a folder or volume row:
+
+- Within one volume the items are moved. Onto another volume they are copied.
+- Hold Option (⌥) to copy instead, or Command (⌘) to move instead. The pointer shows which will happen.
+- The folder under the pointer is highlighted. Hovering over a collapsed folder for a second opens it, and dragging
+  near the top or bottom edge scrolls the tree.
+- Dropping onto a file, onto the item itself or a folder inside it, or moving an item into the folder it is already in,
+  is refused. Press Escape to cancel a drag.
+- When a name is already taken, WhatDisk asks whether to replace the existing item, keep both (the new one is given a
+  numbered name such as "report 2.pdf"), skip the item or stop. "Apply to all" answers for the rest of the operation.
+- Progress shows in the status bar, and **Stop** cancels. The tree, chart and totals update in place without a
+  rescan; copied folders are read into the tree at their new place.
+
+Dragging works only within WhatDisk; items cannot be dragged to or from the Finder.
 
 ## Requirements
 
@@ -143,13 +195,15 @@ what-disk/
 │   │   ├── Scanning/             Scan engine: the scan tree, multi-threaded session, work queue, planner,
 │   │   │                         volume-boundary rules and the portable System.IO enumerator
 │   │   ├── Volumes/              Volume and mount-table model, file-system classification, portable volume service
-│   │   ├── Platform/             Contracts a platform head implements (icons, folder picker, capabilities)
-│   │   │                         and path helpers
+│   │   ├── Platform/             Contracts a platform head implements (icons, folder picker, file manager
+│   │   │                         actions, capabilities) and path helpers
+│   │   ├── FileOperations/       Moving, copying and deleting items, with conflict handling and progress
 │   │   ├── Charting/             File-type totals and the pie chart model: top types, "other", stable colours
 │   │   ├── Formatting/           Byte sizes, percentages, counts, durations and timestamps
-│   │   ├── ViewModels/           MVVM view models: main window, tree rows and their minimal-change
-│   │   │                         reconciliation, chart, details and volume picker
-│   │   ├── Views/                Main window, tree list, chart pane, details pane, volume picker and About window
+│   │   ├── ViewModels/           MVVM view models: main window (with the item actions), tree rows and their
+│   │   │                         minimal-change reconciliation, chart, details, volume picker and dialogs
+│   │   ├── Views/                Main window and menu bar, tree list (context menu, keys, drag and drop),
+│   │   │                         chart pane, details pane, volume picker, question dialogs and About window
 │   │   │   └── Controls/         Custom controls: tree row panel and column layout, percentage bar,
 │   │   │                         pie chart, legend swatch, platform icon
 │   │   ├── Icons/                Background icon cache and built-in vector icons
@@ -164,6 +218,7 @@ what-disk/
 │       ├── MacVolumeFacts.cs            Decodes and classifies volume attributes (pure code)
 │       ├── MacIconProvider.cs           Finder icons through NSWorkspace
 │       ├── MacFileTypeProvider.cs       Packages and file type descriptions (uniform type identifiers)
+│       ├── MacShellService.cs           Trash, open, Open With, reveal, Get Info, Quick Look and the pasteboard
 │       ├── MacPlatformServiceCollectionExtensions.cs   Registers the macOS services
 │       └── Interop/              libc and Objective-C runtime bindings, errno mapping, constants
 └── tests/
@@ -223,6 +278,17 @@ on macOS), so each head ships only the native code it needs.
   "other", colours that stay with their type, slices drawn in colour-slot order so neighbouring colours are always a
   tested pair, 2 px gaps between slices, a legend, tooltips and separate light and dark colours.
 
+### File operations
+
+- Every action works on the topmost selected items, so a folder and a file inside it are never processed twice.
+- Moves within a volume are renames. Other moves copy, then delete the original; a partly copied item is removed if
+  the copy fails or is stopped. Symbolic links are copied as links and never followed.
+- The scan tree is edited in place: a deleted or moved node is detached and its size and counts are subtracted from
+  every ancestor; a moved node is attached to its new folder; a copied folder is scanned into its destination by a
+  small scan session whose completion stops at that folder. Only the affected folders' chart totals are recomputed.
+- The view model asks questions through `IDialogService`, so tests answer them without windows. File manager actions
+  go through `IShellService`, which reports what the platform supports so unsupported actions are hidden.
+
 ### macOS specifics
 
 - `getattrlistbulk` is called with `FSOPT_RETURN_REALDEV`, so the system and data volumes of the startup disk (which
@@ -231,6 +297,8 @@ on macOS), so each head ships only the native code it needs.
   VM and the like) are left out of the volume list, and snapshots are treated as virtual.
 - Icons come from `NSWorkspace` through the Objective-C runtime: per path for volumes, application bundles and
   special folders, per file type otherwise. They load on background threads and are cached.
+- Move to Trash uses `NSFileManager`, so the Finder's Put Back works. Show in Finder, Open With and the pasteboard
+  use `NSWorkspace` and `NSPasteboard`; Get Info asks the Finder through AppleScript, and Quick Look runs `qlmanage`.
 
 ## Performance
 
@@ -257,14 +325,18 @@ System.IO enumeration reports 29 GB because it cannot see allocation or recognis
 
 ## Testing
 
-`dotnet test` runs 219 tests across two projects.
+`dotnet test` runs 263 tests across two projects.
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
 - **View models:** tree reconciliation (including randomised tests), the chart model and the main window. Fake time
   checks the 200 ms refresh while a scan is still running.
+- **Item actions:** deleting, moving, copying across volumes, name conflicts and rescanning run against real files in
+  a temporary folder, with a recording shell service and scripted dialogs. The 10 MB and 10-file confirmation
+  threshold and the drop rules are checked case by case.
 - **Headless UI:** the main window is rendered with Skia in light and dark themes after a real scan. The pane
-  proportions, header sorting, selection and the icon pipeline are checked.
+  proportions, header sorting, selection and the icon pipeline are checked. Real key presses, clicks and drag events
+  check the arrow keys, shortcuts, focus tracking, the context menu, range selection and drag and drop.
 - **macOS:** the native enumerator is compared with System.IO on real directories, including hard links, firmlinks
   and mount points at `/`. Other tests cover volume discovery and NSWorkspace icons on background threads. One test
   attaches a real disk image inside a scanned folder.

@@ -1,3 +1,4 @@
+using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.Time.Testing;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
@@ -52,7 +53,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// <summary>
     /// Before any scan the view model is idle and cannot scan without a path.
     /// </summary>
-    [Fact]
+    [AvaloniaFact]
     public void Initially_IsIdleAndNeedsAPath()
     {
         Assert.False(ViewModel.IsScanning);
@@ -68,7 +69,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// A completed scan fills the tree (with the root expanded), the chart and the status bar.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task StartScan_PopulatesEveryPane()
     {
         ViewModel.PathText = _fs.Root;
@@ -95,7 +96,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// When a scan finishes, the first row is selected and the view is asked to focus it.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task StartScan_FocusesTheFirstRowWhenDone()
     {
         var focused = new List<TreeRowViewModel>();
@@ -112,7 +113,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// A row the user selected while the scan was running keeps the selection and receives the focus.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task StartScan_KeepsASelectionMadeDuringTheScan()
     {
         using var release = new ManualResetEventSlim();
@@ -142,7 +143,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// The panes refresh on the timer while a scan is still running.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task Refresh_UpdatesThePanesWhileScanning()
     {
         using var release = new ManualResetEventSlim();
@@ -173,7 +174,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Stopping a scan keeps the partial results and says the scan was stopped.
     /// </summary>
     /// <returns>A task that completes when the scan has stopped.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task StopScan_KeepsPartialResults()
     {
         _fs.OnRead = (path, token) =>
@@ -200,7 +201,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// highlights the file's type.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task SelectedRow_DrivesTheChartAndDetails()
     {
         ViewModel.PathText = _fs.Root;
@@ -228,7 +229,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Collapsing the folder of the selected row moves the selection to the folder.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task SelectedRow_MovesToTheNearestVisibleAncestorWhenHidden()
     {
         ViewModel.PathText = _fs.Root;
@@ -246,7 +247,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Selecting a node from the chart reveals it in the tree and asks the view to scroll to it.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task SelectNode_RevealsAndScrollsToTheNode()
     {
         ViewModel.PathText = _fs.Root;
@@ -265,7 +266,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Sorting by a column re-sorts the tree and toggles direction on a second click.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task Sort_ReordersTheTree()
     {
         ViewModel.PathText = _fs.Root;
@@ -283,7 +284,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Where several volumes can be scanned together, the checked volumes are scanned as separate roots.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task CheckedVolumes_AreScannedTogetherWhenSupported()
     {
         _viewModel = Create(PlatformCapabilities.Generic with { SupportsMultipleVolumeSelection = true });
@@ -309,7 +310,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Typing a path after checking volumes scans the typed path instead.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task TypedPath_TakesPrecedenceOverCheckedVolumes()
     {
         _viewModel = Create(PlatformCapabilities.Generic with { SupportsMultipleVolumeSelection = true });
@@ -327,7 +328,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Choosing a single volume from the picker scans it straight away.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task ScanVolume_ScansTheChosenVolume()
     {
         _volumes.Selectable.Add(FakeVolumeService.CreateVolume("m", _fs.PathOf("music")));
@@ -343,7 +344,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Loading volumes keeps the ones that were checked.
     /// </summary>
     /// <returns>A task that completes when the volumes have loaded twice.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task LoadVolumes_KeepsCheckedVolumes()
     {
         _volumes.Selectable.Add(FakeVolumeService.CreateVolume("a", "/a"));
@@ -362,7 +363,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// replaces the first request quietly instead of failing.
     /// </summary>
     /// <returns>A task that completes when both requests have finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task LoadVolumes_ToleratesOverlappingRequests()
     {
         _volumes.Selectable.Add(FakeVolumeService.CreateVolume("a", "/a"));
@@ -380,7 +381,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Browsing scans the chosen folder; cancelling the dialog does nothing.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task Browse_ScansTheChosenFolder()
     {
         await ViewModel.BrowseCommand.ExecuteAsync(null);
@@ -398,7 +399,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Folders that cannot be read are summarised in the status bar.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task ErrorSummary_CountsUnreadableFolders()
     {
         _fs.Fail("locked", new UnauthorizedAccessException("denied"));
@@ -414,7 +415,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     /// Starting a new scan replaces the previous results.
     /// </summary>
     /// <returns>A task that completes when both scans have finished.</returns>
-    [Fact]
+    [AvaloniaFact]
     public async Task StartScan_ReplacesPreviousResults()
     {
         ViewModel.PathText = _fs.PathOf("photos");

@@ -20,4 +20,18 @@ public sealed class DiskScanner(IFileSystemEnumerator enumerator, IVolumeService
         session.Start();
         return session;
     }
+
+    /// <inheritdoc/>
+    public ScanSession StartInto(DirectoryNode parent, string name, IEnumerable<RootNode> knownRoots)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(knownRoots);
+        var path = Path.Join(parent.FullPath, name);
+        var directory = new DirectoryNode(name, parent, parent.Volume, enumerator.GetIdentity(path), null) { IsCompletionBoundary = true };
+        parent.InsertChild(directory);
+        var session = new ScanSession(new ScanRequest([path]), [], volumes.GetMountTable(), enumerator, timeProvider);
+        session.StartInto(directory, path, knownRoots);
+        return session;
+    }
 }

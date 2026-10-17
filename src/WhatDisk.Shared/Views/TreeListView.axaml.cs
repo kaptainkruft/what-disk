@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using WhatDisk.FileOperations;
@@ -389,8 +390,10 @@ public partial class TreeListView : UserControl
     /// <summary>
     /// Tracks whether the tree is the active pane as keyboard focus moves around the window: focus in the tree makes it
     /// active, focus in another control (such as the path box) makes it inactive, and focus in a menu (including a
-    /// menu bar drawn in the window) leaves it as it was, so the menu's commands still apply to the selection. Focus
-    /// in menus, dialogs and other windows outside this window does not reach here, and also leaves it as it was.
+    /// menu bar drawn in the window) leaves it as it was, so the menu's commands still apply to the selection. A
+    /// menu's drop-downs and context menus are popups outside the window's visual tree, so a menu is found through the
+    /// logical tree, which runs from each item to the menu that owns it. Focus in dialogs and other windows does not
+    /// reach here, and also leaves it as it was.
     /// </summary>
     /// <param name="sender">The window.</param>
     /// <param name="e">The event.</param>
@@ -405,7 +408,7 @@ public partial class TreeListView : UserControl
         {
             viewModel.IsTreeActive = true;
         }
-        else if (focused.FindAncestorOfType<Menu>(includeSelf: true) is null)
+        else if (focused.FindLogicalAncestorOfType<MenuBase>(includeSelf: true) is null)
         {
             viewModel.IsTreeActive = false;
         }

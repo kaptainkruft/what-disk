@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using WhatDisk.Platform;
@@ -160,7 +161,8 @@ public sealed class TreeInteractionTests : IDisposable
 
     /// <summary>
     /// The item commands follow keyboard focus: focusing the path box disables them, so its own copy and delete keys
-    /// work, and focusing the tree enables them again. Moving into the window's menu bar keeps them enabled.
+    /// work, and focusing the tree enables them again. Moving into the window's menu bar, its drop-downs or the context
+    /// menu keeps them enabled.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
@@ -176,6 +178,25 @@ public sealed class TreeInteractionTests : IDisposable
         Assert.True(fileMenu.Focus());
         Dispatcher.UIThread.RunJobs();
         Assert.True(viewModel.IsTreeActive);
+
+        // Hovering or arrowing into the drop-down focuses its items, which are in a popup outside the menu bar's
+        // visual tree; Win32 moves focus there, the headless platform does not, so the focus change is raised directly.
+        fileMenu.Open();
+        Dispatcher.UIThread.RunJobs();
+        var open = fileMenu.GetLogicalChildren().OfType<MenuItem>().First();
+        open.RaiseEvent(new FocusChangedEventArgs(InputElement.GotFocusEvent) { NewFocusedElement = open });
+        Assert.True(viewModel.IsTreeActive);
+        Assert.True(viewModel.CopyItemsCommand.CanExecute(null));
+        fileMenu.Close();
+
+        Focus(window, a);
+        Press(window, Key.F10, RawInputModifiers.Shift);
+        var contextMenu = Assert.IsType<ContextMenu>(List(window).ContextMenu);
+        var copy = contextMenu.Items.OfType<MenuItem>().First(static item => item.Header as string == "Copy");
+        copy.RaiseEvent(new FocusChangedEventArgs(InputElement.GotFocusEvent) { NewFocusedElement = copy });
+        Assert.True(viewModel.IsTreeActive);
+        Assert.True(copy.IsEffectivelyEnabled);
+        contextMenu.Close();
 
         window.GetVisualDescendants().OfType<TextBox>().Single().Focus();
         Dispatcher.UIThread.RunJobs();

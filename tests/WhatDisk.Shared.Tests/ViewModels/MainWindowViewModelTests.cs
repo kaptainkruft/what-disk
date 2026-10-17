@@ -306,6 +306,25 @@ public sealed class MainWindowViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// Asking for the volumes again while they are still loading (opening the volume menu just after start-up)
+    /// replaces the first request quietly instead of failing.
+    /// </summary>
+    /// <returns>A task that completes when both requests have finished.</returns>
+    [Fact]
+    public async Task LoadVolumes_ToleratesOverlappingRequests()
+    {
+        _volumes.Selectable.Add(FakeVolumeService.CreateVolume("a", "/a"));
+        _volumes.SelectableDelay = TimeSpan.FromMilliseconds(300);
+
+        var first = ViewModel.LoadVolumesCommand.ExecuteAsync(null);
+        var second = ViewModel.LoadVolumesCommand.ExecuteAsync(null);
+        await Task.WhenAll(first, second);
+
+        Assert.Single(ViewModel.Volumes);
+        Assert.False(ViewModel.IsLoadingVolumes);
+    }
+
+    /// <summary>
     /// Browsing scans the chosen folder; cancelling the dialog does nothing.
     /// </summary>
     /// <returns>A task that completes when the scan has finished.</returns>

@@ -266,7 +266,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Loads (or reloads) the volumes for the volume picker, keeping any that were checked.
+    /// Loads (or reloads) the volumes for the volume picker, keeping any that were checked. A newer request (for
+    /// example opening the volume menu while the start-up load is still running) cancels an older one, which then
+    /// ends quietly.
     /// </summary>
     /// <param name="cancellationToken">Cancels loading.</param>
     /// <returns>A task that completes when the list has been loaded.</returns>
@@ -291,14 +293,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 Volumes.Add(item);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Superseded by a newer request, which owns the loading indicator now.
+            return;
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             StatusText = $"The list of volumes could not be read: {exception.Message}";
         }
-        finally
-        {
-            IsLoadingVolumes = false;
-        }
+
+        IsLoadingVolumes = false;
     }
 
     /// <summary>
@@ -354,7 +359,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var folder = await _folderPicker.PickFolderAsync(cancellationToken);
+        string? folder;
+        try
+        {
+            folder = await _folderPicker.PickFolderAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
         if (string.IsNullOrEmpty(folder))
         {
             return;

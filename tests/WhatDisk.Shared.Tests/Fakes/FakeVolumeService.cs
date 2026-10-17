@@ -28,6 +28,11 @@ internal sealed class FakeVolumeService : IVolumeService
     public int SelectableCalls { get; private set; }
 
     /// <summary>
+    /// Gets or sets how long <see cref="GetSelectableVolumes"/> takes, to simulate a slow network share.
+    /// </summary>
+    public TimeSpan SelectableDelay { get; set; }
+
+    /// <summary>
     /// Creates a volume description for tests.
     /// </summary>
     /// <param name="id">The volume identifier.</param>
@@ -69,6 +74,11 @@ internal sealed class FakeVolumeService : IVolumeService
     public IReadOnlyList<VolumeInfo> GetSelectableVolumes()
     {
         SelectableCalls++;
+        if (SelectableDelay > TimeSpan.Zero)
+        {
+            Thread.Sleep(SelectableDelay);
+        }
+
         return Selectable;
     }
 

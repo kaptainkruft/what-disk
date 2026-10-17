@@ -1,0 +1,103 @@
+# Release pipeline: computes the next version from the git tags, then builds, tests and packages every platform in
+# .github/platforms.json, tags the commit and (optionally) publishes a GitHub release. Run it from the Actions tab.
+name: Release pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to increase
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      prerelease:
+        description: Prerelease label (for example alpha); leave empty for a final release
+        type: string
+        default: alpha
+      create-release:
+        description: Publish a GitHub release with the packages
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Versions come from tags, so runs must not overlap or two runs could claim the same number.
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Determine version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      prefix: ${{ steps.next.outputs.prefix }}
+      suffix: ${{ steps.next.outputs.suffix }}
+      tag: ${{ steps.next.outputs.tag }}
+      prerelease: ${{ steps.next.outputs.prerelease }}
+      timestamp: ${{ steps.timestamp.outputs.timestamp }}
+      platforms: ${{ steps.platforms.outputs.platforms }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Test the version script
+        run: .github/scripts/test-next-version.sh
+      - name: Compute the next version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: .github/scripts/next-version.sh "$BUMP" "$PRERELEASE"
+      - name: Record the release time (UTC)
+        id: timestamp
+        run: echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$GITHUB_OUTPUT"
+      - name: Read the platform matrix
+        id: platforms
+        run: echo "platforms=$(jq -c . .github/platforms.json)" >>"$GITHUB_OUTPUT"
+      - name: Summary
+        env:
+          VERSION: ${{ steps.next.outputs.version }}
+        run: echo "Building **WhatDisk $VERSION** from \`${GITHUB_SHA::7}\`" >>"$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      platforms: ${{ needs.version.outputs.platforms }}
+      version-prefix: ${{ needs.version.outputs.prefix }}
+      version-suffix: ${{ needs.version.outputs.suffix }}
+      build-timestamp: ${{ needs.version.outputs.timestamp }}
+
+  test:
+    name: Test
+    needs: version
+    uses: ./.github/workflows/test.yml
+    with:
+      platforms: ${{ needs.version.outputs.platforms }}
+      version-prefix: ${{ needs.version.outputs.prefix }}
+      version-suffix: ${{ needs.version.outputs.suffix }}
+
+  package:
+    name: Package
+    needs: [version, build, test]
+    uses: ./.github/workflows/package.yml
+    with:
+      platforms: ${{ needs.version.outputs.platforms }}
+      version: ${{ needs.version.outputs.version }}
+
+  release:
+    name: Release
+    needs: [version, package]
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      version: ${{ needs.version.outputs.version }}
+      tag: ${{ needs.version.outputs.tag }}
+      prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+      create-release: ${{ inputs.create-release }}

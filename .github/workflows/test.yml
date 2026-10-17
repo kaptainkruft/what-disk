@@ -1,0 +1,53 @@
+# Runs every test project on each platform's runner (so each architecture is tested on its own hardware) and uploads
+# the results as test-results-<platform name>.
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      platforms:
+        description: JSON array of platforms ({ "name", "scripts", "arch", "runner" }), as in .github/platforms.json
+        type: string
+        required: true
+      version-prefix:
+        description: Version without prerelease label, for example 0.1.3
+        type: string
+        default: '0.0.0'
+      version-suffix:
+        description: Prerelease label, or empty for a final release
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(inputs.platforms) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Test
+        env:
+          VERSION_PREFIX: ${{ inputs.version-prefix }}
+          VERSION_SUFFIX: ${{ inputs.version-suffix }}
+        run: >
+          dotnet test --configuration Release
+          "-p:VersionPrefix=$VERSION_PREFIX"
+          "-p:VersionSuffix=$VERSION_SUFFIX"
+          --results-directory "$GITHUB_WORKSPACE/test-results"
+          --report-xunit-trx
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ matrix.platform.name }}
+          path: test-results
+          if-no-files-found: warn
+          retention-days: 14

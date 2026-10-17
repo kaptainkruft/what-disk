@@ -77,6 +77,50 @@ final status line and exits with code 0 when the scan completed, which is handy 
 dotnet run --project src/WhatDisk.MacOS -- /Applications --exit-when-done
 ```
 
+## Versioning and releases
+
+WhatDisk uses [semantic versioning](https://semver.org). **Git tags are the source of truth**: every tag looks like
+`vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-LABEL` (for example `v0.1.3-alpha`). The project is in prerelease, so
+versions are `0.x` with the `alpha` label.
+
+Releases are built by the **Release pipeline** workflow (Actions tab › Release pipeline › Run workflow). Its options:
+
+| Option | Meaning |
+|---|---|
+| Bump | `patch` (default), `minor` or `major`. The pipeline takes the highest version among the tags and increases that part. |
+| Prerelease | The prerelease label, `alpha` by default. Leave it empty for a final release. |
+| Create release | Publish a GitHub release with the packages attached. |
+
+Every successful run tags the built commit, so each build has its own number and the next run continues from it.
+The version and release time (UTC) are compiled into the application and shown in **WhatDisk › About WhatDisk**.
+Local builds are versioned `0.0.0-dev` and show "Development build".
+
+The pipeline is composed of reusable workflows, each running as a matrix over the platforms listed in
+`.github/platforms.json` (currently macOS on Apple silicon and macOS on Intel; each is built and tested on its own
+kind of runner):
+
+| Workflow | Does |
+|---|---|
+| `pipeline.yml` | Computes the version, then runs the four workflows below |
+| `build.yml` | Builds each platform with `build/<scripts>/publish.sh` |
+| `test.yml` | Runs all tests on each platform |
+| `package.yml` | Packages each build with `build/<scripts>/package.sh` |
+| `release.yml` | Tags the commit and, if requested, publishes the GitHub release |
+
+On macOS the build is a Native AOT `WhatDisk.app`, packaged separately for each kind of Mac as
+`WhatDisk-<version>-macos-apple-silicon.dmg` and `WhatDisk-<version>-macos-intel.dmg`. Each disk image shows the app
+beside an Applications shortcut, so it installs by dragging. The same steps run locally:
+
+```sh
+VERSION_PREFIX=0.1.3 VERSION_SUFFIX=alpha build/macos/publish.sh arm64 out/app
+build/macos/package.sh out/app 0.1.3-alpha macos-apple-silicon out/package
+.github/scripts/next-version.sh patch alpha    # what the next pipeline run would build
+.github/scripts/test-next-version.sh           # tests for the version script
+```
+
+Adding a platform means adding `publish.sh` and `package.sh` scripts under `build/<scripts>/` and an entry in
+`.github/platforms.json` naming the scripts folder, architecture and runner.
+
 ## Project layout
 
 ```text
@@ -87,6 +131,12 @@ what-disk/
 │                                 warnings as errors, XML documentation
 ├── Directory.Packages.props      Central package versions
 ├── .editorconfig                 Code style and analyzer configuration
+├── .github/
+│   ├── platforms.json            The platforms the release pipeline builds (its matrix)
+│   ├── scripts/                  next-version.sh (versions from tags) and its tests
+│   └── workflows/                pipeline, build, test, package and release workflows
+├── build/
+│   └── macos/                    publish.sh (app bundle for one architecture) and package.sh (disk image)
 ├── src/
 │   ├── WhatDisk.Shared/          The shared application: everything that is not platform specific
 │   │   ├── App.axaml(.cs)        The Avalonia application and its theme
@@ -99,12 +149,13 @@ what-disk/
 │   │   ├── Formatting/           Byte sizes, percentages, counts, durations and timestamps
 │   │   ├── ViewModels/           MVVM view models: main window, tree rows and their minimal-change
 │   │   │                         reconciliation, chart, details and volume picker
-│   │   ├── Views/                Main window, tree list, chart pane, details pane and volume picker
+│   │   ├── Views/                Main window, tree list, chart pane, details pane, volume picker and About window
 │   │   │   └── Controls/         Custom controls: tree row panel and column layout, percentage bar,
 │   │   │                         pie chart, legend swatch, platform icon
 │   │   ├── Icons/                Background icon cache and built-in vector icons
 │   │   ├── Themes/               Light and dark palettes, styles
-│   │   └── Hosting/              Start-up: dependency injection, app builder, command-line options
+│   │   └── Hosting/              Start-up: dependency injection, app builder, command-line options and
+│   │                             version information
 │   └── WhatDisk.MacOS/           The macOS head: entry point and macOS-only services
 │       ├── Program.cs            Entry point: Avalonia's native Cocoa backend plus the macOS services
 │       ├── MacFileSystemEnumerator.cs   Directory reading with getattrlistbulk
@@ -206,7 +257,7 @@ System.IO enumeration reports 29 GB because it cannot see allocation or recognis
 
 ## Testing
 
-`dotnet test` runs 215 tests across two projects.
+`dotnet test` runs 219 tests across two projects.
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.

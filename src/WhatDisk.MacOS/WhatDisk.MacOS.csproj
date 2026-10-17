@@ -46,8 +46,9 @@
   <key>CFBundleIdentifier</key><string>$(BundleIdentifier)</string>
   <key>CFBundleExecutable</key><string>$(AssemblyName)</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>$(Version)</string>
-  <key>CFBundleVersion</key><string>$(Version)</string>
+  <key>CFBundleShortVersionString</key><string>$(VersionPrefix)</string>
+  <key>CFBundleVersion</key><string>$(VersionPrefix)</string>
+  <key>WhatDiskInformationalVersion</key><string>$(Version)</string>
   <key>LSMinimumSystemVersion</key><string>$(MinimumMacOSVersion)</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key><true/>

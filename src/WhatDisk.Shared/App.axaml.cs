@@ -43,19 +43,8 @@ public partial class App : Application
     /// </summary>
     /// <param name="sender">The menu item.</param>
     /// <param name="e">Unused.</param>
-    private async void OnAboutClicked(object? sender, EventArgs e)
-    {
-        var info = AppVersionInfo.FromAssembly(System.Reflection.Assembly.GetEntryAssembly() ?? typeof(App).Assembly);
-        var about = new AboutWindow(info);
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } owner })
-        {
-            await about.ShowDialog(owner);
-        }
-        else
-        {
-            about.Show();
-        }
-    }
+    private async void OnAboutClicked(object? sender, EventArgs e) =>
+        await AboutWindow.ShowAsync((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow);
 
     /// <inheritdoc/>
     public override void OnFrameworkInitializationCompleted()

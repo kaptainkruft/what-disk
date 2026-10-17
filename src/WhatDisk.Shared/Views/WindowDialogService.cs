@@ -20,11 +20,11 @@ public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
         }
 
         // A destructive action is never the default, so Return alone cannot destroy anything.
-        var question = new QuestionWindow(request.Title, request.Message,
-        [
-            new QuestionButton("Cancel", "cancel", IsDefault: request.IsDestructive, IsCancel: true),
-            new QuestionButton(request.ConfirmText, "confirm", IsDefault: !request.IsDestructive, IsDestructive: request.IsDestructive),
-        ]);
+        var cancel = new QuestionButton("Cancel", "cancel", IsDefault: request.IsDestructive, IsCancel: true);
+        var confirm = new QuestionButton(request.ConfirmText, "confirm", IsDefault: !request.IsDestructive, IsDestructive: request.IsDestructive);
+
+        // macOS puts the confirming button last (rightmost); Windows puts it first, before Cancel.
+        var question = new QuestionWindow(request.Title, request.Message, OperatingSystem.IsMacOS() ? [cancel, confirm] : [confirm, cancel]);
         return await question.ShowAsync(window) == "confirm";
     }
 
@@ -38,7 +38,8 @@ public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
         }
 
         var name = Path.GetFileName(conflict.ExistingPath);
-        var folder = Path.GetFileName(Path.GetDirectoryName(conflict.ExistingPath)) ?? conflict.ExistingPath;
+        var parent = Path.GetDirectoryName(conflict.ExistingPath) ?? conflict.ExistingPath;
+        var folder = Path.GetFileName(parent) is { Length: > 0 } folderName ? folderName : parent;
         var kind = conflict.IsDirectory ? "folder" : "item";
         var question = new QuestionWindow(
             $"An {kind} named “{name}” already exists in “{folder}”.",

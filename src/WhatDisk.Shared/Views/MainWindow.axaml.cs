@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using Avalonia.Controls;
+using CommunityToolkit.Mvvm.Input;
 using Avalonia.Input;
 using WhatDisk.Platform;
 using WhatDisk.ViewModels;
@@ -74,54 +75,73 @@ public partial class MainWindow : Window
     private void OnFocusRequested(object? sender, TreeRowViewModel row) => TreeList.FocusRow(row);
 
     /// <summary>
-    /// Creates the File, Edit and View menus for the menu bar. Their items are enabled only while the tree is the
+    /// Creates the File, Edit and View menus (and, without an application menu, Help) for the menu bar: the macOS menu
+    /// bar, or a menu bar at the top of the window elsewhere. The item commands are enabled only while the tree is the
     /// active pane, so that shortcuts such as ⌘C and ⌘⌫ reach the path box when it has focus.
     /// </summary>
     /// <param name="viewModel">The view model whose commands the menus run.</param>
     /// <returns>The menu bar.</returns>
-    private static NativeMenu BuildMenuBar(MainWindowViewModel viewModel)
+    private NativeMenu BuildMenuBar(MainWindowViewModel viewModel)
     {
+        var platform = viewModel.Platform;
+        var keys = platform.Shortcuts;
         var supported = viewModel.ShellCapabilities;
         var openWith = new NativeMenu();
         openWith.NeedsUpdate += (_, _) => FillOpenWith(openWith, viewModel);
+        openWith.Opening += (_, _) => FillOpenWith(openWith, viewModel);
         var file = new NativeMenu();
-        Add(file, "Open", viewModel.OpenCommand, ItemShortcuts.Open, ShellCapabilities.Open);
+        Add(file, "Open", viewModel.OpenCommand, keys.Open, ShellCapabilities.Open);
         if (supported.HasFlag(ShellCapabilities.OpenWith))
         {
             file.Items.Add(new NativeMenuItem("Open With") { Menu = openWith });
         }
 
         file.Items.Add(new NativeMenuItemSeparator());
-        Add(file, "Show in Finder", viewModel.RevealCommand, ItemShortcuts.Reveal, ShellCapabilities.Reveal);
-        Add(file, "Quick Look", viewModel.QuickLookCommand, ItemShortcuts.QuickLookMenu, ShellCapabilities.QuickLook);
-        Add(file, "Get Info", viewModel.GetInfoCommand, ItemShortcuts.GetInfo, ShellCapabilities.ShowInfo);
+        Add(file, $"Show in {platform.FileManagerName}", viewModel.RevealCommand, keys.Reveal, ShellCapabilities.Reveal);
+        Add(file, "Quick Look", viewModel.QuickLookCommand, keys.QuickLookMenu, ShellCapabilities.QuickLook);
+        Add(file, platform.InfoCommandName, viewModel.GetInfoCommand, keys.GetInfo, ShellCapabilities.ShowInfo);
         file.Items.Add(new NativeMenuItemSeparator());
-        Add(file, "Rescan", viewModel.RescanCommand, ItemShortcuts.Rescan);
+        Add(file, "Rescan", viewModel.RescanCommand, keys.Rescan);
         file.Items.Add(new NativeMenuItemSeparator());
-        Add(file, "Move to Trash", viewModel.MoveToTrashCommand, ItemShortcuts.MoveToTrash, ShellCapabilities.Trash);
-        Add(file, "Delete Immediately\u2026", viewModel.DeleteImmediatelyCommand, ItemShortcuts.DeleteImmediately);
+        Add(file, $"Move to {platform.TrashName}", viewModel.MoveToTrashCommand, keys.MoveToTrash, ShellCapabilities.Trash);
+        Add(file, $"{platform.PermanentDeleteName}\u2026", viewModel.DeletePermanentlyCommand, keys.DeletePermanently);
+        if (!platform.HasApplicationMenu)
+        {
+            file.Items.Add(new NativeMenuItemSeparator());
+            file.Items.Add(new NativeMenuItem("E_xit") { Command = new RelayCommand(Close) });
+        }
 
         var edit = new NativeMenu();
-        Add(edit, "Copy", viewModel.CopyItemsCommand, ItemShortcuts.Copy, ShellCapabilities.CopyItems);
-        Add(edit, "Copy Path", viewModel.CopyPathCommand, ItemShortcuts.CopyPath, ShellCapabilities.CopyText);
+        Add(edit, "Copy", viewModel.CopyItemsCommand, keys.Copy, ShellCapabilities.CopyItems);
+        Add(edit, "Copy Path", viewModel.CopyPathCommand, keys.CopyPath, ShellCapabilities.CopyText);
         edit.Items.Add(new NativeMenuItemSeparator());
-        Add(edit, "Select All", viewModel.SelectAllCommand, ItemShortcuts.SelectAll);
+        Add(edit, "Select All", viewModel.SelectAllCommand, keys.SelectAll);
 
         var view = new NativeMenu();
-        Add(view, "Expand All Beneath", viewModel.ExpandAllCommand, ItemShortcuts.ExpandAll);
-        Add(view, "Collapse All Beneath", viewModel.CollapseAllCommand, ItemShortcuts.CollapseAll);
+        Add(view, "Expand All Beneath", viewModel.ExpandAllCommand, keys.ExpandAll);
+        Add(view, "Collapse All Beneath", viewModel.CollapseAllCommand, keys.CollapseAll);
 
-        return new NativeMenu
+        // Where the menu bar is drawn in the window (Windows), the titles get access keys (Alt+F and so on) and About
+        // goes in a Help menu; macOS has About in the application menu instead.
+        var accessKey = platform.HasApplicationMenu ? string.Empty : "_";
+        var bar = new NativeMenu
         {
             Items =
             {
-                new NativeMenuItem("File") { Menu = file },
-                new NativeMenuItem("Edit") { Menu = edit },
-                new NativeMenuItem("View") { Menu = view },
+                new NativeMenuItem($"{accessKey}File") { Menu = file },
+                new NativeMenuItem($"{accessKey}Edit") { Menu = edit },
+                new NativeMenuItem($"{accessKey}View") { Menu = view },
             },
         };
+        if (!platform.HasApplicationMenu)
+        {
+            var help = new NativeMenu { Items = { new NativeMenuItem("_About WhatDisk") { Command = new AsyncRelayCommand(() => AboutWindow.ShowAsync(this)) } } };
+            bar.Items.Add(new NativeMenuItem("_Help") { Menu = help });
+        }
 
-        void Add(NativeMenu menu, string header, ICommand command, KeyGesture gesture, ShellCapabilities? capability = null)
+        return bar;
+
+        void Add(NativeMenu menu, string header, ICommand command, KeyGesture? gesture, ShellCapabilities? capability = null)
         {
             if (capability is not { } required || supported.HasFlag(required))
             {

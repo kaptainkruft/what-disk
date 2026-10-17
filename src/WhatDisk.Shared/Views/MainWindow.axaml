@@ -9,6 +9,9 @@
         MinWidth="820" MinHeight="520"
         WindowStartupLocation="CenterScreen">
   <DockPanel>
+    <!-- The File, Edit, View and Help menus where the platform has no native menu bar (it hides itself on macOS). -->
+    <NativeMenuBar DockPanel.Dock="Top" />
+
     <!-- What to scan -->
     <Border DockPanel.Dock="Top" Classes="toolbar">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">

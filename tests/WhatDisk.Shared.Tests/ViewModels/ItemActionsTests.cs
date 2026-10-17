@@ -38,7 +38,7 @@ public sealed class ItemActionsTests : IDisposable
     public ItemActionsTests()
     {
         _base = PathUtilities.ResolveLinks(_temp.FullName);
-        _volumes.QueriedVolume = _volumes.Mount("root", "/");
+        _volumes.QueriedVolume = _volumes.Mount("root", Path.GetPathRoot(_base)!);
         _volumes.Mount("vol2", PathOf("vol2"));
         Write("a.txt");
         Write("b/c.txt");
@@ -97,7 +97,7 @@ public sealed class ItemActionsTests : IDisposable
 
         var viewModel = await ScanAsync();
         Select(viewModel, "big");
-        var command = permanently ? viewModel.DeleteImmediatelyCommand : viewModel.MoveToTrashCommand;
+        var command = permanently ? viewModel.DeletePermanentlyCommand : viewModel.MoveToTrashCommand;
 
         _dialogs.Confirm = false;
         await command.ExecuteAsync(null);
@@ -115,11 +115,43 @@ public sealed class ItemActionsTests : IDisposable
     }
 
     /// <summary>
+    /// Questions and status messages use the platform's words: the Trash and "immediately" on macOS, the Recycle Bin
+    /// and "permanently" on Windows.
+    /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
+    /// <param name="trashTitle">The expected question before moving to the Trash or Recycle Bin.</param>
+    /// <param name="deleteTitle">The expected question before deleting permanently.</param>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaTheory]
+    [InlineData("macOS", "Move \u201Cbig\u201D to the Trash?", "Delete \u201Cbig\u201D immediately?")]
+    [InlineData("Windows", "Move \u201Cbig\u201D to the Recycle Bin?", "Delete \u201Cbig\u201D permanently?")]
+    public async Task Delete_UsesThePlatformsWords(string platformName, string trashTitle, string deleteTitle)
+    {
+        for (var index = 0; index < 11; index++)
+        {
+            Write($"big/{index}.txt");
+        }
+
+        var viewModel = await ScanAsync(TestPlatforms.Named(platformName));
+        Select(viewModel, "big");
+        _dialogs.Confirm = false;
+
+        await viewModel.MoveToTrashCommand.ExecuteAsync(null);
+        await viewModel.DeletePermanentlyCommand.ExecuteAsync(null);
+        Assert.Equal([trashTitle, deleteTitle], _dialogs.Confirmations.Select(static request => request.Title));
+        Assert.Equal($"Move to {viewModel.Platform.TrashName}", _dialogs.Confirmations[0].ConfirmText);
+
+        _dialogs.Confirm = true;
+        await viewModel.MoveToTrashCommand.ExecuteAsync(null);
+        Assert.StartsWith($"Moved 1 item to the {viewModel.Platform.TrashName}", viewModel.StatusText, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ten small files are under the threshold and delete without asking.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
-    public async Task DeleteImmediately_TenSmallFiles_DoesNotAsk()
+    public async Task DeletePermanently_TenSmallFiles_DoesNotAsk()
     {
         for (var index = 0; index < 10; index++)
         {
@@ -129,7 +161,7 @@ public sealed class ItemActionsTests : IDisposable
         var viewModel = await ScanAsync();
         Select(viewModel, "ten");
 
-        await viewModel.DeleteImmediatelyCommand.ExecuteAsync(null);
+        await viewModel.DeletePermanentlyCommand.ExecuteAsync(null);
 
         Assert.Empty(_dialogs.Confirmations);
         Assert.False(Directory.Exists(PathOf("ten")));
@@ -157,12 +189,12 @@ public sealed class ItemActionsTests : IDisposable
         viewModel.SelectedRow = viewModel.Tree.RootRows[0];
         Assert.True(viewModel.OpenCommand.CanExecute(null));
         Assert.False(viewModel.MoveToTrashCommand.CanExecute(null));
-        Assert.False(viewModel.DeleteImmediatelyCommand.CanExecute(null));
+        Assert.False(viewModel.DeletePermanentlyCommand.CanExecute(null));
 
         _shell.Capabilities = ShellCapabilities.Open;
         Select(viewModel, "a.txt");
         Assert.False(viewModel.MoveToTrashCommand.CanExecute(null));
-        Assert.True(viewModel.DeleteImmediatelyCommand.CanExecute(null));
+        Assert.True(viewModel.DeletePermanentlyCommand.CanExecute(null));
         Assert.False(viewModel.RevealCommand.CanExecute(null));
     }
 
@@ -182,7 +214,7 @@ public sealed class ItemActionsTests : IDisposable
 
         var revealed = _shell.Calls[0]["reveal: ".Length..].Split('|');
         Assert.Equal([PathOf("a.txt"), PathOf("b")], revealed.Order(StringComparer.Ordinal));
-        var copied = _shell.Calls[1]["copy text: ".Length..].Split('\n');
+        var copied = _shell.Calls[1]["copy text: ".Length..].Split(Environment.NewLine);
         Assert.Equal([PathOf("a.txt"), PathOf("b")], copied.Order(StringComparer.Ordinal));
         Assert.StartsWith("open with TextEdit: ", _shell.Calls[2], StringComparison.Ordinal);
         Assert.Equal("Copied 2 paths to the clipboard", viewModel.StatusText);
@@ -355,14 +387,15 @@ public sealed class ItemActionsTests : IDisposable
     /// <summary>
     /// Scans the temporary directory.
     /// </summary>
+    /// <param name="platform">The platform conventions, or <see langword="null"/> for the generic ones.</param>
     /// <returns>The view model, with the tree active.</returns>
-    private async Task<MainWindowViewModel> ScanAsync()
+    private async Task<MainWindowViewModel> ScanAsync(PlatformCapabilities? platform = null)
     {
         var viewModel = new MainWindowViewModel(
             new DiskScanner(new ManagedFileSystemEnumerator(), _volumes, TimeProvider.System),
             _volumes,
             new FakeFolderPicker(),
-            PlatformCapabilities.Generic,
+            platform ?? PlatformCapabilities.Generic,
             TimeProvider.System,
             shell: _shell,
             dialogs: _dialogs)

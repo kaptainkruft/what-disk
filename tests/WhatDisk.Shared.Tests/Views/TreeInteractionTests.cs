@@ -48,7 +48,7 @@ public sealed class TreeInteractionTests : IDisposable
     public TreeInteractionTests()
     {
         _base = PathUtilities.ResolveLinks(_temp.FullName);
-        _volumes.QueriedVolume = _volumes.Mount("root", "/");
+        _volumes.QueriedVolume = _volumes.Mount("root", Path.GetPathRoot(_base)!);
         Write("a.txt", 40);
         Write("b/c.txt", 30);
         Write("b/inner/g.txt", 20);
@@ -56,61 +56,126 @@ public sealed class TreeInteractionTests : IDisposable
     }
 
     /// <summary>
-    /// Enter does nothing; Space previews the selection; Option+Right and Option+Left expand and collapse everything
-    /// beneath the selected folder.
+    /// Enter does nothing; the platform's expand-all and collapse-all shortcuts open and close everything beneath the
+    /// selected folder (on Windows, numeric-keypad * expands too).
     /// </summary>
+    /// <param name="platformName">The conventions to follow: "macOS" or "Windows".</param>
     /// <returns>A task that completes when the test has finished.</returns>
-    [AvaloniaFact]
-    public async Task Keys_QuickLookAndExpandAll_EnterDoesNothing()
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task Keys_ExpandAndCollapseAll_EnterDoesNothing(string platformName)
     {
-        var (window, viewModel) = await ShowAsync();
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
+        var keys = viewModel.Platform.Shortcuts;
         var b = Row(viewModel, "b");
         Focus(window, b);
 
         Press(window, Key.Enter);
         Assert.False(b.IsExpanded);
 
-        Press(window, Key.Space);
-        Assert.Equal([$"quick look: {PathOf("b")}"], _shell.Calls);
-
-        Press(window, Key.Right, RawInputModifiers.Alt);
+        Press(window, keys.ExpandAll);
         Assert.Contains(viewModel.Tree.Rows, static row => row.Name == "g.txt");
 
-        Press(window, Key.Left, RawInputModifiers.Alt);
+        Press(window, keys.CollapseAll);
         Assert.False(b.IsExpanded);
         Assert.DoesNotContain(viewModel.Tree.Rows, static row => row.Name == "c.txt");
+
+        if (keys.ExpandAllAlternate is { } alternate)
+        {
+            Press(window, alternate);
+            Assert.Contains(viewModel.Tree.Rows, static row => row.Name == "g.txt");
+        }
+
+        Assert.Empty(_shell.Calls);
     }
 
     /// <summary>
-    /// Where no menu bar takes the shortcuts, the tree runs them itself: Command+Backspace moves to the Trash.
+    /// Space toggles Quick Look on macOS; Windows has no previews, so Space does nothing there.
     /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
     /// <returns>A task that completes when the test has finished.</returns>
-    [AvaloniaFact]
-    public async Task CommandShortcuts_RunFromTheTree()
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task Space_PreviewsOnMacOSOnly(string platformName)
     {
-        var (window, viewModel) = await ShowAsync();
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
+        Focus(window, Row(viewModel, "b"));
+
+        Press(window, Key.Space);
+
+        Assert.Equal(platformName == "macOS" ? [$"quick look: {PathOf("b")}"] : [], _shell.Calls);
+    }
+
+    /// <summary>
+    /// Where no native menu bar takes the shortcuts (here, and on Windows), the tree runs them itself, once each: the
+    /// platform's Copy Path, information and delete-to-Trash shortcuts (⌥⌘C, ⌘I, ⌘⌫ on macOS; Ctrl+Shift+C,
+    /// Alt+Enter, Delete on Windows).
+    /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task CommandShortcuts_RunFromTheTree(string platformName)
+    {
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
+        var keys = viewModel.Platform.Shortcuts;
         Focus(window, Row(viewModel, "a.txt"));
 
-        Press(window, Key.C, ToRaw(ItemShortcuts.CommandKey | KeyModifiers.Alt));
-        Press(window, Key.Back, ToRaw(ItemShortcuts.CommandKey));
+        Press(window, keys.CopyPath);
+        Press(window, keys.GetInfo);
+        Press(window, keys.MoveToTrash);
         await Eventually.True(() => !viewModel.IsOperationRunning && !File.Exists(PathOf("a.txt")), "the file is in the Trash");
 
-        Assert.Equal([$"copy text: {PathOf("a.txt")}", $"trash: {PathOf("a.txt")}"], _shell.Calls);
+        Assert.Equal([$"copy text: {PathOf("a.txt")}", $"info: {PathOf("a.txt")}", $"trash: {PathOf("a.txt")}"], _shell.Calls);
+        Assert.StartsWith($"Moved 1 item to the {viewModel.Platform.TrashName}", viewModel.StatusText, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The permanent-delete and rescan shortcuts work too: Shift+Delete and F5 on Windows, ⌥⌘⌫ and ⇧⌘R on macOS.
+    /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task DeleteAndRescanShortcuts_RunFromTheTree(string platformName)
+    {
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
+        var keys = viewModel.Platform.Shortcuts;
+        Focus(window, Row(viewModel, "d"));
+        Write("d/new.txt", 5);
+
+        Press(window, keys.Rescan);
+        await Eventually.True(() => !viewModel.IsOperationRunning && viewModel.StatusText == "Rescanned 1 folder", "the folder has been rescanned");
+        Focus(window, viewModel.SelectedRow!);
+        Assert.Equal(2, viewModel.SelectedRow?.Node.FileCount);
+
+        Press(window, keys.DeletePermanently);
+        await Eventually.True(() => !viewModel.IsOperationRunning && !Directory.Exists(PathOf("d")), "the folder is deleted");
+        Assert.Empty(_shell.Calls);
     }
 
     /// <summary>
     /// The item commands follow keyboard focus: focusing the path box disables them, so its own copy and delete keys
-    /// work, and focusing the tree enables them again.
+    /// work, and focusing the tree enables them again. Moving into the window's menu bar keeps them enabled.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
     public async Task ItemCommands_FollowKeyboardFocus()
     {
-        var (window, viewModel) = await ShowAsync();
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Windows);
         var a = Row(viewModel, "a.txt");
         Focus(window, a);
         Assert.True(viewModel.IsTreeActive);
         Assert.True(viewModel.CopyItemsCommand.CanExecute(null));
+
+        var fileMenu = window.GetVisualDescendants().OfType<MenuItem>().First(static item => item.Header as string == "_File");
+        Assert.True(fileMenu.Focus());
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewModel.IsTreeActive);
 
         window.GetVisualDescendants().OfType<TextBox>().Single().Focus();
         Dispatcher.UIThread.RunJobs();
@@ -122,14 +187,17 @@ public sealed class TreeInteractionTests : IDisposable
     }
 
     /// <summary>
-    /// Shift+F10 opens the context menu with the item actions and the applications for Open With; with nothing
-    /// selected it does not open.
+    /// Shift+F10 opens the context menu with the item actions in the platform's words and the applications for Open
+    /// With; actions the platform lacks (Quick Look on Windows) are hidden; with nothing selected it does not open.
     /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
     /// <returns>A task that completes when the test has finished.</returns>
-    [AvaloniaFact]
-    public async Task ContextMenu_OpensFromTheKeyboard()
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task ContextMenu_OpensFromTheKeyboard(string platformName)
     {
-        var (window, viewModel) = await ShowAsync();
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
         Focus(window, Row(viewModel, "a.txt"));
         var list = List(window);
 
@@ -137,18 +205,76 @@ public sealed class TreeInteractionTests : IDisposable
 
         var menu = Assert.IsType<ContextMenu>(list.ContextMenu);
         Assert.True(menu.IsOpen);
-        var headers = menu.Items.OfType<MenuItem>().Select(static item => item.Header as string).ToList();
-        Assert.Equal(
-            ["Open", "Open With", "Show in Finder", "Quick Look", "Get Info", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Move to Trash", "Delete Immediately…"],
-            headers);
+        var headers = menu.Items.OfType<MenuItem>().Where(static item => item.IsVisible).Select(static item => item.Header as string).ToList();
+        string[] expected = platformName == "macOS"
+            ? ["Open", "Open With", "Show in Finder", "Quick Look", "Get Info", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Move to Trash", "Delete Immediately\u2026"]
+            : ["Open", "Open With", "Show in File Explorer", "Properties", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Move to Recycle Bin", "Delete Permanently\u2026"];
+        Assert.Equal(expected, headers);
         var openWith = menu.Items.OfType<MenuItem>().Single(static item => item.Header as string == "Open With");
         Assert.Equal(["Preview (default)", "TextEdit"], openWith.Items.OfType<MenuItem>().Select(static item => item.Header as string));
-        Assert.Equal(ItemShortcuts.MoveToTrash, menu.Items.OfType<MenuItem>().Single(static item => item.Header as string == "Move to Trash").InputGesture);
+        var trash = menu.Items.OfType<MenuItem>().Single(item => item.Header as string == $"Move to {viewModel.Platform.TrashName}");
+        Assert.Equal(viewModel.Platform.Shortcuts.MoveToTrash, trash.InputGesture);
         menu.Close();
 
         viewModel.Selection.Clear();
         Press(window, Key.F10, RawInputModifiers.Shift);
         Assert.False(menu.IsOpen);
+    }
+
+    /// <summary>
+    /// The menu bar has File, Edit and View menus in the platform's words with its shortcuts. Without an application
+    /// menu (Windows) it is drawn in the window, its titles have access keys, and Help holds About and File holds
+    /// Exit.
+    /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task MenuBar_FollowsThePlatform(string platformName)
+    {
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
+        var platform = viewModel.Platform;
+
+        var bar = Assert.IsType<NativeMenu>(NativeMenu.GetMenu(window));
+        var titles = bar.Items.OfType<NativeMenuItem>().Select(static item => item.Header).ToList();
+        var file = bar.Items.OfType<NativeMenuItem>().First().Menu!.Items
+            .Where(static item => item is not NativeMenuItemSeparator)
+            .OfType<NativeMenuItem>()
+            .ToDictionary(static item => item.Header!, StringComparer.Ordinal);
+
+        Assert.Equal(platform.HasApplicationMenu ? ["File", "Edit", "View"] : ["_File", "_Edit", "_View", "_Help"], titles);
+        Assert.Equal(platform.Shortcuts.Reveal, file[$"Show in {platform.FileManagerName}"].Gesture);
+        Assert.Equal(platform.Shortcuts.GetInfo, file[platform.InfoCommandName].Gesture);
+        Assert.Equal(platform.Shortcuts.MoveToTrash, file[$"Move to {platform.TrashName}"].Gesture);
+        Assert.Equal(platform.Shortcuts.DeletePermanently, file[$"{platform.PermanentDeleteName}\u2026"].Gesture);
+        Assert.Equal(platform.Shortcuts.Rescan, file["Rescan"].Gesture);
+        Assert.Equal(!platform.HasApplicationMenu, file.ContainsKey("E_xit"));
+        Assert.Equal(platformName == "macOS", file.ContainsKey("Quick Look"));
+
+        // Headless windows have no native menu bar, so the menus are drawn in the window, as on Windows.
+        var inWindow = window.GetVisualDescendants().OfType<NativeMenuBar>().Single();
+        Assert.True(inWindow.IsEffectivelyVisible);
+        Assert.Contains(window.GetVisualDescendants().OfType<MenuItem>(), item => item.Header as string == titles[0]);
+    }
+
+    /// <summary>
+    /// Where the menus are exported to a native menu bar (macOS), the in-window menu bar is hidden and takes no space.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task MenuBar_IsHiddenWhenExportedNatively()
+    {
+        var (window, _) = await ShowAsync(TestPlatforms.MacOS);
+        var inWindow = window.GetVisualDescendants().OfType<NativeMenuBar>().Single();
+        Assert.True(inWindow.Bounds.Height > 0);
+
+        window.SetValue(NativeMenu.IsNativeMenuExportedProperty, true);
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(0, inWindow.Bounds.Height);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<MenuItem>(), static item => item.IsEffectivelyVisible);
     }
 
     /// <summary>
@@ -222,6 +348,13 @@ public sealed class TreeInteractionTests : IDisposable
     }
 
     /// <summary>
+    /// Presses and releases a shortcut.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <param name="gesture">The shortcut.</param>
+    private static void Press(Window window, KeyGesture gesture) => Press(window, gesture.Key, ToRaw(gesture.KeyModifiers));
+
+    /// <summary>
     /// Converts key modifiers to raw input modifiers.
     /// </summary>
     /// <param name="modifiers">The modifiers.</param>
@@ -291,14 +424,22 @@ public sealed class TreeInteractionTests : IDisposable
     /// <summary>
     /// Scans the temporary directory and shows the results in a window.
     /// </summary>
+    /// <param name="platform">The platform conventions, or <see langword="null"/> for the generic ones.</param>
     /// <returns>The window and its view model.</returns>
-    private async Task<(MainWindow Window, MainWindowViewModel ViewModel)> ShowAsync()
+    private async Task<(MainWindow Window, MainWindowViewModel ViewModel)> ShowAsync(PlatformCapabilities? platform = null)
     {
+        platform ??= PlatformCapabilities.Generic;
+        if (platform.Shortcuts.QuickLook is null)
+        {
+            // A platform without a preview shortcut (Windows) has no previews.
+            _shell.Capabilities &= ~ShellCapabilities.QuickLook;
+        }
+
         var viewModel = new MainWindowViewModel(
             new DiskScanner(new ManagedFileSystemEnumerator(), _volumes, TimeProvider.System),
             _volumes,
             new FakeFolderPicker(),
-            PlatformCapabilities.Generic,
+            platform,
             TimeProvider.System,
             shell: _shell,
             dialogs: _dialogs)

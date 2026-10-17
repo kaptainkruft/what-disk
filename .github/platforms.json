@@ -10,5 +10,18 @@
     "scripts": "macos",
     "arch": "x64",
     "runner": "macos-15-intel"
+  },
+  {
+    "name": "windows-x64",
+    "scripts": "windows",
+    "arch": "x64",
+    "runner": "windows-latest"
+  },
+  {
+    "name": "windows-arm64",
+    "scripts": "windows",
+    "arch": "arm64",
+    "runner": "windows-11-arm",
+    "package-runner": "windows-latest"
   }
 ]

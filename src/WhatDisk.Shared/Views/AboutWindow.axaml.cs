@@ -26,6 +26,24 @@ public partial class AboutWindow : Window
         : this() => DataContext = info;
 
     /// <summary>
+    /// Shows the About window for the running application, modally over an owner window when there is one.
+    /// </summary>
+    /// <param name="owner">The window that owns the About window, or <see langword="null"/>.</param>
+    /// <returns>A task that completes when the About window has closed (or, without an owner, has opened).</returns>
+    public static async Task ShowAsync(Window? owner)
+    {
+        var about = new AboutWindow(AppVersionInfo.FromAssembly(System.Reflection.Assembly.GetEntryAssembly() ?? typeof(AboutWindow).Assembly));
+        if (owner is not null)
+        {
+            await about.ShowDialog(owner);
+        }
+        else
+        {
+            about.Show();
+        }
+    }
+
+    /// <summary>
     /// Closes the window.
     /// </summary>
     /// <param name="sender">The OK button.</param>

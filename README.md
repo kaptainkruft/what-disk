@@ -4,30 +4,34 @@ WhatDisk shows where the space on a disk has gone. It scans a volume or a folder
 results as a sortable tree with usage bars, a pie chart of the selected folder and a details pane, all updating live
 while the scan runs.
 
-It is a cross-platform .NET 10 / C# 14 application built with [Avalonia 12](https://avaloniaui.net/). This first
-iteration contains the shared application and the **macOS** head; the Windows and Linux heads are planned for a later
-iteration (see [Roadmap](#roadmap)).
+It is a cross-platform .NET 10 / C# 14 application built with [Avalonia 12](https://avaloniaui.net/): a shared
+application plus a **macOS** head and a **Windows** head, each using its platform's native APIs. A Linux head is
+planned (see [Roadmap](#roadmap)).
 
 ## Features
 
 - **One window, four areas.** A toolbar to choose what to scan, the results tree (about 80% of the width), and a right
   pane split into a pie chart of file types (top) and the details of the selected item (bottom). A status bar shows
   progress.
-- **Choose what to scan.** Pick a volume from the **Volumes** menu (one at a time on macOS), type a path (`~` is
-  expanded), or use **Browse…** for the system folder dialog. Mounted network shares appear in the volume list and can
-  be scanned like any folder. A path given on the command line is scanned on start-up.
+- **Choose what to scan.** Pick a volume from the **Volumes** menu (one at a time on macOS; tick several drives on
+  Windows), type a path (`~` is expanded on macOS; `%VARIABLES%` and quoted paths from File Explorer's "Copy as path"
+  are accepted on Windows), or use **Browse…** for the system folder dialog. Mounted network shares and mapped network
+  drives appear in the volume list, and `\\server\share` paths can be typed on Windows. A path given on the command line
+  is scanned on start-up.
 - **Fast, multi-threaded scanning** with the most efficient API on each platform. On macOS that is
-  `getattrlistbulk`, which returns names, types, sizes, allocation and identity for hundreds of entries per system call.
+  `getattrlistbulk`, which returns names, types, sizes, allocation and identity for hundreds of entries per system call;
+  on Windows it is `GetFileInformationByHandleEx`, which does the same in 64 KB batches.
 - **Live results.** Every 200 ms the tree, chart, details and status bar are refreshed from the scan in progress. Each
   scanned root is expanded automatically, so its first-level children are visible from the start.
-- **The tree.** Columns: Name (expandable, with Finder icons), % of Disk and % of Parent (both with left-to-right
+- **The tree.** Columns: Name (expandable, with Finder or File Explorer icons), % of Disk and % of Parent (both with left-to-right
   bars), Size, Files and Folders. Click a header to sort; drag a header edge to resize. Folders still being scanned are
   shown in italics, and folders that could not be read carry a warning icon.
 - **Per-volume results.** When a scan spans volumes (for example `/` on macOS, which spans *Macintosh HD*, *Macintosh
-  HD – Data*, *Preboot*, *VM* and any external disks), each volume becomes its own top-level item, added as it is
-  discovered. The place where it is mounted is shown as a placeholder that links to it, so nothing is counted twice.
+  HD – Data*, *Preboot*, *VM* and any external disks, or a Windows folder with a drive mounted in it), each volume
+  becomes its own top-level item, added as it is discovered. The place where it is mounted is shown as a placeholder that links to it, so nothing is counted twice.
 - **Accurate sizes.** Sizes are the space actually allocated on disk (so compressed, sparse and cloud-only files are
-  counted correctly), hard links are counted once, symbolic links are never followed, and virtual file systems
+  counted correctly), hard links are counted once on macOS (on Windows, as in File Explorer, each link counts), symbolic
+  links and junctions are never followed, and virtual file systems
   (`/dev`, autofs, snapshots) are skipped.
 - **Robust.** Unreadable or vanished folders are recorded and the scan carries on; the scan can be stopped at any time
   and the partial results stay on screen.
@@ -43,42 +47,47 @@ iteration (see [Roadmap](#roadmap)).
 
 ## Working with items
 
-**Selecting.** Click a row to select it. Command-click adds or removes a row, Shift-click selects a range, Shift with
-the Up or Down arrow extends the selection, and ⌘A selects every visible row. Right-clicking a row that is not selected
+**Selecting.** Click a row to select it. Command-click (Ctrl-click on Windows) adds or removes a row, Shift-click
+selects a range, Shift with the Up or Down arrow extends the selection, and ⌘A (Ctrl+A) selects every visible row. Right-clicking a row that is not selected
 selects it first. When the selection contains a folder and items inside it, actions apply to the folder only. With
 several items selected, the details pane shows their combined size and counts.
 
-**Context menu and menu bar.** Right-click the selection, or press Shift+F10, for the context menu. The same actions
-are in the **File**, **Edit** and **View** menus. They are enabled only while the tree has keyboard focus, so ⌘C, ⌘A
-and ⌘⌫ still work as usual in the path box.
+**Context menu and menu bar.** Right-click the selection, or press Shift+F10 (or the Menu key), for the context
+menu. The same actions are in the **File**, **Edit** and **View** menus: in the macOS menu bar, or in a menu bar at the
+top of the window on Windows, which also has **Help › About WhatDisk** and **File › Exit** (Alt+F opens the File
+menu). The actions are enabled only while the tree has keyboard focus, so the copy and delete keys still work as usual
+in the path box. The menus use each platform's words and shortcuts:
 
-| Action | Shortcut | What it does |
-|---|---|---|
-| Open | ⌘O or ⌘↓ | Opens the items with their default applications |
-| Open With | | Lists the applications that can open the item, the default first |
-| Show in Finder | ⌘R | Reveals the items in a Finder window |
-| Quick Look | Space (⌘Y in the menu bar) | Previews the items; press again to close the preview |
-| Get Info | ⌘I | Opens the Finder's information window for each item |
-| Copy | ⌘C | Copies the items, ready to paste in the Finder |
-| Copy Path | ⌥⌘C | Copies the full paths as text, one per line |
-| Select All | ⌘A | Selects every visible row |
-| Expand All Beneath | ⌥→ | Expands the selected folders and every folder inside them |
-| Collapse All Beneath | ⌥← | Collapses the selected folders and every folder inside them |
-| Rescan | ⇧⌘R | Reads the selected folders again; a top-level item rescans everything |
-| Move to Trash | ⌘⌫ | Moves the items to the Trash |
-| Delete Immediately… | ⌥⌘⌫ | Deletes the items permanently |
+| macOS | Shortcut | Windows | Shortcut | What it does |
+|---|---|---|---|---|
+| Open | ⌘O or ⌘↓ | Open | Ctrl+O | Opens the items with their default applications |
+| Open With | | Open With | | Lists the applications that can open the item, the default first |
+| Show in Finder | ⌘R | Show in File Explorer | Shift+Alt+R | Opens a file manager window with the items selected |
+| Quick Look | Space (⌘Y in the menu bar) | – | | Previews the items; press again to close the preview (macOS only) |
+| Get Info | ⌘I | Properties | Alt+Enter | Opens the information window (one for several items on Windows) |
+| Copy | ⌘C | Copy | Ctrl+C | Copies the items, ready to paste in the file manager |
+| Copy Path | ⌥⌘C | Copy Path | Ctrl+Shift+C | Copies the full paths as text, one per line |
+| Select All | ⌘A | Select All | Ctrl+A | Selects every visible row |
+| Expand All Beneath | ⌥→ | Expand All Beneath | Alt+→ or numeric keypad * | Expands the selected folders and every folder inside them |
+| Collapse All Beneath | ⌥← | Collapse All Beneath | Alt+← | Collapses the selected folders and every folder inside them |
+| Rescan | ⇧⌘R | Rescan | F5 | Reads the selected folders again; a top-level item rescans everything |
+| Move to Trash | ⌘⌫ | Move to Recycle Bin | Delete | Moves the items to the Trash or Recycle Bin |
+| Delete Immediately… | ⌥⌘⌫ | Delete Permanently… | Shift+Delete | Deletes the items permanently |
 
 The arrow keys work as before: Up and Down move, Right expands or moves to the first child, Left collapses or moves to
-the parent. Return does nothing in the tree.
+the parent. Return does nothing in the tree on either platform.
 
 **Deleting.** Both kinds of delete ask first when the selection holds more than 10 MB or more than 10 files. Smaller
-deletions happen straight away. There is no undo, but items moved to the Trash can be restored from it. Top-level
+deletions happen straight away. There is no undo, but items moved to the Trash or Recycle Bin can be restored from it. On Windows, an item
+that cannot go to the Recycle Bin (on a network share, or too large for it) is deleted only after Windows has warned
+and you have agreed. Top-level
 items, other volumes shown inside a folder and items on read-only volumes cannot be moved or deleted.
 
 **Drag and drop.** Drag the selection onto a folder or volume row:
 
 - Within one volume the items are moved. Onto another volume they are copied.
-- Hold Option (⌥) to copy instead, or Command (⌘) to move instead. The pointer shows which will happen.
+- Hold Option (⌥) to copy instead, or Command (⌘) to move instead; on Windows, Ctrl copies and Shift moves, as in File
+  Explorer. The pointer shows which will happen.
 - The folder under the pointer is highlighted. Hovering over a collapsed folder for a second opens it, and dragging
   near the top or bottom edge scrolls the tree.
 - Dropping onto a file, onto the item itself or a folder inside it, or moving an item into the folder it is already in,
@@ -88,14 +97,17 @@ items, other volumes shown inside a folder and items on read-only volumes cannot
 - Progress shows in the status bar, and **Stop** cancels. The tree, chart and totals update in place without a
   rescan; copied folders are read into the tree at their new place.
 
-Dragging works only within WhatDisk; items cannot be dragged to or from the Finder.
+Dragging works only within WhatDisk; items cannot be dragged to or from the Finder or File Explorer.
 
 ## Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) (10.0.100 or later; `global.json` rolls forward to the latest
   installed feature band).
-- macOS 12 or later on Apple silicon or Intel to run the macOS head.
-- Xcode Command Line Tools to publish (the macOS head publishes as a Native AOT executable).
+- macOS 12 or later on Apple silicon or Intel to run the macOS head; Windows 10 or 11 on x64 or Arm64 to run the
+  Windows head.
+- To publish (both heads publish as Native AOT executables, which must be built on their own operating system): Xcode
+  Command Line Tools on macOS; Visual Studio 2022 or its Build Tools with the "Desktop development with C++" workload
+  on Windows.
 
 ## Build, run and test
 
@@ -106,6 +118,8 @@ dotnet build
 # Run the app, optionally scanning a path straight away.
 dotnet run --project src/WhatDisk.MacOS
 dotnet run --project src/WhatDisk.MacOS -- ~/Downloads
+dotnet run --project src/WhatDisk.Windows                  # on Windows
+dotnet run --project src/WhatDisk.Windows -- D:\Downloads
 
 # Run all tests (xUnit v3 on Microsoft.Testing.Platform).
 dotnet test
@@ -113,14 +127,19 @@ dotnet test
 # Keep the headless UI test renders for review.
 WHATDISK_SCREENSHOTS=/tmp/whatdisk-shots dotnet test --project tests/WhatDisk.Shared.Tests
 
-# Publish a Native AOT app bundle (Apple silicon or Intel).
+# Publish a Native AOT app bundle (Apple silicon or Intel), on a Mac.
 dotnet publish src/WhatDisk.MacOS -c Release -r osx-arm64
 dotnet publish src/WhatDisk.MacOS -c Release -r osx-x64
+
+# Publish a Native AOT executable (x64 or Arm64), on Windows.
+dotnet publish src/WhatDisk.Windows -c Release -r win-x64
+dotnet publish src/WhatDisk.Windows -c Release -r win-arm64
 ```
 
 Publishing writes `WhatDisk.app` (about 34 MB, ad-hoc signed) to
-`src/WhatDisk.MacOS/bin/Release/net10.0/<runtime>/publish/`. Add `-p:PublishAot=false` for a conventional self-contained
-build instead.
+`src/WhatDisk.MacOS/bin/Release/net10.0/<runtime>/publish/`, or `WhatDisk.exe` and the native libraries it loads
+(Skia, HarfBuzz and ANGLE) to `src/WhatDisk.Windows/bin/Release/net10.0/<runtime>/publish/`. Add `-p:PublishAot=false`
+for a conventional self-contained build instead (which can also be built for Windows on a Mac).
 
 The command line is `WhatDisk [path] [--exit-when-done]`. With `--exit-when-done` the app scans the path, prints the
 final status line and exits with code 0 when the scan completed, which is handy for scripted smoke tests:
@@ -128,6 +147,10 @@ final status line and exits with code 0 when the scan completed, which is handy 
 ```sh
 dotnet run --project src/WhatDisk.MacOS -- /Applications --exit-when-done
 ```
+
+On Windows the summary appears in the console the app was started from, or in the file or pipe its output is
+redirected to. `cmd` does not wait for a windowed program, so use `start /wait WhatDisk.exe C:\Users --exit-when-done`
+there to wait for the exit code.
 
 ## Versioning and releases
 
@@ -148,30 +171,47 @@ The version and release time (UTC) are compiled into the application and shown i
 Local builds are versioned `0.0.0-dev` and show "Development build".
 
 The pipeline is composed of reusable workflows, each running as a matrix over the platforms listed in
-`.github/platforms.json` (currently macOS on Apple silicon and macOS on Intel; each is built and tested on its own
-kind of runner):
+`.github/platforms.json`: macOS on Apple silicon and on Intel, and Windows on x64 and on Arm64. Each is built, smoke
+tested and tested on its own kind of runner (`macos-latest`, `macos-15-intel`, `windows-latest` and
+`windows-11-arm`). Every runner runs every test project; tests that need another operating system skip.
 
 | Workflow | Does |
 |---|---|
 | `pipeline.yml` | Computes the version, then runs the four workflows below |
-| `build.yml` | Builds each platform with `build/<scripts>/publish.sh` |
+| `build.yml` | Builds each platform with `build/<scripts>/publish.sh`, then starts the app to scan a folder with `build/<scripts>/smoke-test.sh` |
 | `test.yml` | Runs all tests on each platform |
-| `package.yml` | Packages each build with `build/<scripts>/package.sh` |
+| `package.yml` | Packages each build with `build/<scripts>/package.sh` (on the platform's `package-runner` when it names one) |
 | `release.yml` | Tags the commit and, if requested, publishes the GitHub release |
+| `verify.yml` | Run on its own: builds, smoke tests, tests and packages every platform as `0.0.0-ci` without tagging or releasing, to try a branch first |
 
 On macOS the build is a Native AOT `WhatDisk.app`, packaged separately for each kind of Mac as
 `WhatDisk-<version>-macos-apple-silicon.dmg` and `WhatDisk-<version>-macos-intel.dmg`. Each disk image shows the app
-beside an Applications shortcut, so it installs by dragging. The same steps run locally:
+beside an Applications shortcut, so it installs by dragging.
+
+On Windows the build is a Native AOT `WhatDisk.exe` with its native libraries, packaged for each architecture in two
+forms: `WhatDisk-<version>-windows-x64.zip` (unzip anywhere and run `WhatDisk.exe`) and
+`WhatDisk-<version>-windows-x64-setup.exe`, an [Inno Setup](https://jrsoftware.org/isinfo.php) installer that installs
+for the current user without administrator rights, with a Start menu entry and an uninstaller (likewise `windows-arm64`).
+Neither is code-signed yet, so Windows SmartScreen asks for confirmation the first time. Every package has a `.sha256`
+checksum beside it.
+
+The same steps run locally:
 
 ```sh
 VERSION_PREFIX=0.1.3 VERSION_SUFFIX=alpha build/macos/publish.sh arm64 out/app
 build/macos/package.sh out/app 0.1.3-alpha macos-apple-silicon out/package
 .github/scripts/next-version.sh patch alpha    # what the next pipeline run would build
 .github/scripts/test-next-version.sh           # tests for the version script
+
+# On Windows, in Git Bash:
+VERSION_PREFIX=0.1.3 VERSION_SUFFIX=alpha build/windows/publish.sh x64 out/app
+build/windows/smoke-test.sh out/app
+build/windows/package.sh out/app 0.1.3-alpha windows-x64 out/package
 ```
 
-Adding a platform means adding `publish.sh` and `package.sh` scripts under `build/<scripts>/` and an entry in
-`.github/platforms.json` naming the scripts folder, architecture and runner.
+Adding a platform means adding `publish.sh`, `smoke-test.sh` and `package.sh` scripts under `build/<scripts>/` and an
+entry in `.github/platforms.json` naming the scripts folder, architecture and runner (and, optionally, a different
+`package-runner`). Every workflow step runs in bash, which Windows runners provide through Git Bash.
 
 ## Project layout
 
@@ -188,7 +228,11 @@ what-disk/
 │   ├── scripts/                  next-version.sh (versions from tags) and its tests
 │   └── workflows/                pipeline, build, test, package and release workflows
 ├── build/
-│   └── macos/                    publish.sh (app bundle for one architecture) and package.sh (disk image)
+│   ├── macos/                    publish.sh (app bundle for one architecture), smoke-test.sh, package.sh (disk image)
+│   ├── windows/                  publish.sh (Native AOT executable for one architecture), smoke-test.sh,
+│   │                             package.sh (zip and installer), WhatDisk.iss (Inno Setup script),
+│   │                             pe-machine.sh (checks an executable's architecture)
+│   └── smoke-test-common.sh      Runs the app with --exit-when-done and checks the result
 ├── src/
 │   ├── WhatDisk.Shared/          The shared application: everything that is not platform specific
 │   │   ├── App.axaml(.cs)        The Avalonia application and its theme
@@ -196,7 +240,7 @@ what-disk/
 │   │   │                         volume-boundary rules and the portable System.IO enumerator
 │   │   ├── Volumes/              Volume and mount-table model, file-system classification, portable volume service
 │   │   ├── Platform/             Contracts a platform head implements (icons, folder picker, file manager
-│   │   │                         actions, capabilities) and path helpers
+│   │   │                         actions, capabilities and wording, shortcut schemes) and path helpers
 │   │   ├── FileOperations/       Moving, copying and deleting items, with conflict handling and progress
 │   │   ├── Charting/             File-type totals and the pie chart model: top types, "other", stable colours
 │   │   ├── Formatting/           Byte sizes, percentages, counts, durations and timestamps
@@ -210,22 +254,40 @@ what-disk/
 │   │   ├── Themes/               Light and dark palettes, styles
 │   │   └── Hosting/              Start-up: dependency injection, app builder, command-line options and
 │   │                             version information
-│   └── WhatDisk.MacOS/           The macOS head: entry point and macOS-only services
-│       ├── Program.cs            Entry point: Avalonia's native Cocoa backend plus the macOS services
-│       ├── MacFileSystemEnumerator.cs   Directory reading with getattrlistbulk
-│       ├── AttributeBufferParser.cs     Decodes getattrlist buffers (pure code, tested on any OS)
-│       ├── MacVolumeService.cs          Mounted volumes with names, physical devices and mount flags
-│       ├── MacVolumeFacts.cs            Decodes and classifies volume attributes (pure code)
-│       ├── MacIconProvider.cs           Finder icons through NSWorkspace
-│       ├── MacFileTypeProvider.cs       Packages and file type descriptions (uniform type identifiers)
-│       ├── MacShellService.cs           Trash, open, Open With, reveal, Get Info, Quick Look and the pasteboard
-│       ├── MacPlatformServiceCollectionExtensions.cs   Registers the macOS services
-│       └── Interop/              libc and Objective-C runtime bindings, errno mapping, constants
+│   ├── WhatDisk.MacOS/           The macOS head: entry point and macOS-only services
+│   │   ├── Program.cs            Entry point: Avalonia's native Cocoa backend plus the macOS services
+│   │   ├── MacFileSystemEnumerator.cs   Directory reading with getattrlistbulk
+│   │   ├── AttributeBufferParser.cs     Decodes getattrlist buffers (pure code, tested on any OS)
+│   │   ├── MacVolumeService.cs          Mounted volumes with names, physical devices and mount flags
+│   │   ├── MacVolumeFacts.cs            Decodes and classifies volume attributes (pure code)
+│   │   ├── MacIconProvider.cs           Finder icons through NSWorkspace
+│   │   ├── MacFileTypeProvider.cs       Packages and file type descriptions (uniform type identifiers)
+│   │   ├── MacShellService.cs           Trash, open, Open With, reveal, Get Info, Quick Look and the pasteboard
+│   │   ├── MacPlatformServiceCollectionExtensions.cs   Registers the macOS services and conventions
+│   │   └── Interop/              libc and Objective-C runtime bindings, errno mapping, constants
+│   └── WhatDisk.Windows/         The Windows head: entry point and Windows-only services
+│       ├── Program.cs            Entry point: Avalonia's Win32 backend plus the Windows services
+│       ├── app.manifest          Windows 10/11, per-monitor DPI, long paths, modern common controls
+│       ├── WindowsFileSystemEnumerator.cs   Directory reading with GetFileInformationByHandleEx
+│       ├── DirectoryEntryParser.cs          Decodes directory listings and classifies reparse points (pure code)
+│       ├── WindowsVolumeService.cs          Volumes with all their drive letters and mounted folders, network
+│       │                                    and subst drives
+│       ├── WindowsVolumeFacts.cs            Names, kinds and the volume list, as File Explorer shows them (pure code)
+│       ├── WindowsIconProvider.cs           Shell icons (SHGetFileInfo and the system image lists)
+│       ├── WindowsFileTypeProvider.cs       Type names registered with Windows ("Text Document")
+│       ├── WindowsShellService.cs           Recycle Bin, Open With, File Explorer, Properties and the clipboard
+│       ├── WindowsClipboard.cs, ShellItems.cs   Clipboard writing and shell item lists
+│       ├── WindowsPaths.cs, IconPixels.cs, ClipboardFormats.cs   Paths, icon pixels and clipboard data (pure code)
+│       ├── WindowsPlatformServiceCollectionExtensions.cs   Registers the Windows services and conventions
+│       └── Interop/              kernel32, shell32, user32, gdi32, ole32 bindings; COM calls, STA threads,
+│                                 Win32 error mapping
 └── tests/
     ├── WhatDisk.Shared.Tests/    Scan engine, volumes, formatting, chart, view models, headless UI
     │                             rendering and documentation coverage
-    └── WhatDisk.MacOS.Tests/     Buffer parsing (any OS) and macOS integration tests against the real
-                                  file system, volumes, disk images and NSWorkspace
+    ├── WhatDisk.MacOS.Tests/     Buffer parsing (any OS) and macOS integration tests against the real
+    │                             file system, volumes, disk images and NSWorkspace
+    └── WhatDisk.Windows.Tests/   Directory listing, path, volume, icon and clipboard helpers (any OS), and
+                                  Windows integration tests against the real file system, volumes and shell
 ```
 
 ## Architecture
@@ -235,17 +297,23 @@ what-disk/
 Almost all code lives in `WhatDisk.Shared`. A platform head contains only its entry point and the services that need
 the operating system:
 
-| Contract | Purpose | macOS implementation |
-|---|---|---|
-| `IFileSystemEnumerator` | Read one directory's entries | `MacFileSystemEnumerator` (`getattrlistbulk`) |
-| `IVolumeService` | List volumes and capture the mount table | `MacVolumeService` (`DriveInfo` + `getattrlist`) |
-| `IIconProvider` | Platform icons for items and volumes | `MacIconProvider` (`NSWorkspace`) |
-| `IFileTypeProvider` | Which folders are single items (packages) and how types are described | `MacFileTypeProvider` (uniform type identifiers) |
-| `PlatformCapabilities` | Conventions: one or several volumes per scan, path comparison, byte units | macOS values |
+| Contract | Purpose | macOS implementation | Windows implementation |
+|---|---|---|---|
+| `IFileSystemEnumerator` | Read one directory's entries | `MacFileSystemEnumerator` (`getattrlistbulk`) | `WindowsFileSystemEnumerator` (`GetFileInformationByHandleEx`) |
+| `IVolumeService` | List volumes and capture the mount table | `MacVolumeService` (`DriveInfo` + `getattrlist`) | `WindowsVolumeService` (`FindFirstVolume`, `GetVolumePathNamesForVolumeName`) |
+| `IIconProvider` | Platform icons for items and volumes | `MacIconProvider` (`NSWorkspace`) | `WindowsIconProvider` (`SHGetFileInfo`) |
+| `IFileTypeProvider` | Which folders are single items (packages) and how types are described | `MacFileTypeProvider` (uniform type identifiers) | `WindowsFileTypeProvider` (registered type names) |
+| `IShellService` | Trash, open, Open With, reveal, information window, preview, clipboard | `MacShellService` (`NSWorkspace`, `NSFileManager`, `NSPasteboard`) | `WindowsShellService` (`SHFileOperation`, `SHAssocEnumHandlers`, `SHOpenFolderAndSelectItems`, `SHObjectProperties`, the clipboard) |
+| `PlatformCapabilities` | Conventions: volumes per scan, path comparison, byte units, the file manager's words, the shortcut scheme, whether there is an application menu | macOS values | Windows values |
 
 The head registers these with `Microsoft.Extensions.DependencyInjection` before the shared defaults, which only fill in
 what the head did not provide. It also chooses its own Avalonia backend (`UseAvaloniaNative().UseSkia().UseHarfBuzz()`
-on macOS), so each head ships only the native code it needs.
+on macOS, `UseWin32().UseSkia().UseHarfBuzz()` on Windows), so each head ships only the native code it needs.
+
+The context menu and menus are shared: one set of actions, named and bound to keys by `PlatformCapabilities`
+(`ShortcutScheme.MacOS` or `ShortcutScheme.Windows`, "Finder" or "File Explorer", "Trash" or "Recycle Bin", "Get
+Info" or "Properties"), and backed by the head's `IShellService`. Actions a platform lacks (Quick Look on Windows) are
+hidden. The system's own context menu is not used on either platform.
 
 ### Scan engine
 
@@ -289,6 +357,28 @@ on macOS), so each head ships only the native code it needs.
 - The view model asks questions through `IDialogService`, so tests answer them without windows. File manager actions
   go through `IShellService`, which reports what the platform supports so unsupported actions are hidden.
 
+### Windows specifics
+
+- Directories are read with `GetFileInformationByHandleEx` and the `FileIdExtdDirectoryInfo` class, which gives each
+  entry's size, allocated size, attributes, reparse tag and 128-bit file ID in 64 KB batches. File systems without it
+  (FAT, some network servers) fall back to `FileIdBothDirectoryInfo` and then `FileFullDirectoryInfo`. Paths use the
+  `\\?\` form, so folders deeper than 260 characters are read.
+- Symbolic links and junctions are links and never followed (which also avoids the compatibility junctions in user
+  profiles). A junction that mounts another volume is a mount point, so the volume becomes its own top-level item.
+  OneDrive placeholders and deduplicated files are ordinary files counted at their allocated size, so online-only
+  files take no space.
+- Hard links cannot be detected in a directory listing without opening every file, so each link is counted, as in File
+  Explorer. Folders such as `C:\Windows\WinSxS`, which share files with `System32`, therefore look larger than the
+  space they free.
+- Volumes come from `FindFirstVolume` with all their drive letters and mounted folders. Mapped network drives are named
+  after their share (`media (\\nas) (Z:)`), and `subst` drives are partial views of the volume they point into.
+- Icons and type names come from the shell (`SHGetFileInfo`, with the 48 and 256 pixel system image lists on high-DPI
+  screens) on background threads. Shell calls that show windows run in a single-threaded apartment, and the few COM
+  interfaces used (`IAssocHandler`, `IImageList`) are called through their virtual tables, which keeps the head free of
+  runtime-generated COM wrappers and compatible with Native AOT.
+- Move to Recycle Bin uses `SHFileOperation` with undo, so items can be restored. Copy puts a file list on the clipboard
+  that File Explorer pastes.
+
 ### macOS specifics
 
 - `getattrlistbulk` is called with `FSOPT_RETURN_REALDEV`, so the system and data volumes of the startup disk (which
@@ -325,7 +415,7 @@ System.IO enumeration reports 29 GB because it cannot see allocation or recognis
 
 ## Testing
 
-`dotnet test` runs 263 tests across two projects.
+`dotnet test` runs 354 tests across three projects (on macOS, 32 Windows-only tests skip; on Windows, the macOS-only ones do).
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
@@ -337,6 +427,11 @@ System.IO enumeration reports 29 GB because it cannot see allocation or recognis
 - **Headless UI:** the main window is rendered with Skia in light and dark themes after a real scan. The pane
   proportions, header sorting, selection and the icon pipeline are checked. Real key presses, clicks and drag events
   check the arrow keys, shortcuts, focus tracking, the context menu, range selection and drag and drop.
+- **Windows:** directory listings in all three layouts are built byte by byte and decoded, including every kind of
+  reparse point, on any OS; so are paths, volume names, icon pixels and clipboard data. On Windows, the enumerator is
+  compared with System.IO (including junctions, long paths and directories larger than one batch), and the volume
+  service, Recycle Bin, Open With, clipboard, icons and type names are exercised for real. Shared view tests run with
+  both platforms' shortcuts and words.
 - **macOS:** the native enumerator is compared with System.IO on real directories, including hard links, firmlinks
   and mount points at `/`. Other tests cover volume discovery and NSWorkspace icons on background threads. One test
   attaches a real disk image inside a scanned folder.
@@ -353,12 +448,21 @@ Tests that need macOS skip on other systems; the parsing tests run everywhere.
 - Network shares must be mounted first, for example in the Finder with **Go › Connect to Server**. They then appear
   in the **Volumes** menu. Shares mounted inside a folder you scan are listed but not scanned unless chosen directly.
 
+## Notes for Windows users
+
+- WhatDisk reads what your account can read. Folders such as `System Volume Information` and other users' profiles are
+  marked as unreadable; run WhatDisk as administrator to include them.
+- To scan a network share, map it to a drive letter (it then appears in the **Volumes** list) or type its path, for
+  example `\\nas\media`.
+- The installer installs for the current user only and needs no administrator rights. The zip runs from anywhere.
+
 ## Roadmap
 
-- **Windows head:** several drives per scan, UNC paths, `GetFileInformationByHandleEx` enumeration (allocated sizes in
-  bulk) and shell icons.
-- **Linux head:** `/proc/self/mountinfo` volumes, `statx`-based enumeration and freedesktop icon themes.
-- The shared contracts listed above are ready for both.
+- **Linux head:** `/proc/self/mountinfo` volumes, `statx`-based enumeration and freedesktop icon themes. The shared
+  contracts listed above are ready for it.
+- **Windows:** an application icon, code signing for the executable and installer, optional hard-link detection (for
+  example through the NTFS master file table, which also allows much faster scans when running as administrator), and
+  dragging items to and from File Explorer.
 
 ## License
 

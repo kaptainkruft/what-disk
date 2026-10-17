@@ -1,12 +1,13 @@
-# Builds the application for each platform and uploads it as an artifact named app-<platform name>.
-# Each platform's scripts folder provides build/<scripts>/publish.sh <arch> <output-directory>.
+# Builds the application for each platform, checks that it starts and scans, and uploads it as an artifact named
+# app-<platform name>. Each platform's scripts folder provides build/<scripts>/publish.sh <arch> <output-directory>
+# and build/<scripts>/smoke-test.sh <output-directory>. Every step runs in bash (Git Bash on Windows).
 name: Build
 
 on:
   workflow_call:
     inputs:
       platforms:
-        description: JSON array of platforms ({ "name", "scripts", "arch", "runner" }), as in .github/platforms.json
+        description: JSON array of platforms ({ "name", "scripts", "arch", "runner", optional "package-runner" }), as in .github/platforms.json
         type: string
         required: true
       version-prefix:
@@ -33,6 +34,9 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(inputs.platforms) }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -44,6 +48,8 @@ jobs:
           VERSION_SUFFIX: ${{ inputs.version-suffix }}
           BUILD_TIMESTAMP: ${{ inputs.build-timestamp }}
         run: build/${{ matrix.platform.scripts }}/publish.sh "${{ matrix.platform.arch }}" out/app
+      - name: Smoke test
+        run: build/${{ matrix.platform.scripts }}/smoke-test.sh out/app
       # Archived first so that file permissions, symbolic links and bundle structure survive the artifact upload.
       - name: Archive
         run: tar -czf app-${{ matrix.platform.name }}.tar.gz -C out/app .

@@ -33,4 +33,15 @@ public sealed class ScanErrorClassifierTests
         Assert.Equal(70, exception.NativeErrorCode);
         Assert.Equal(ScanErrorKind.IO, new FileSystemException("x").Kind);
     }
+
+    /// <summary>
+    /// IO errors that wrap Windows network errors (a share that went away) are network errors.
+    /// </summary>
+    [Fact]
+    public void Classify_RecognisesWindowsNetworkErrors()
+    {
+        Assert.Equal(ScanErrorKind.Network, ScanErrorClassifier.Classify(new IOException("gone", unchecked((int)0x80070035))).Kind);
+        Assert.Equal(ScanErrorKind.Network, ScanErrorClassifier.Classify(new IOException("deleted", unchecked((int)0x80070040))).Kind);
+        Assert.Equal(ScanErrorKind.IO, ScanErrorClassifier.Classify(new IOException("in use", unchecked((int)0x80070020))).Kind);
+    }
 }

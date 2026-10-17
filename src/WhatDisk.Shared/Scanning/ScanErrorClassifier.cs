@@ -19,10 +19,20 @@ public static class ScanErrorClassifier
             UnauthorizedAccessException or System.Security.SecurityException => ScanErrorKind.AccessDenied,
             DirectoryNotFoundException or FileNotFoundException => ScanErrorKind.NotFound,
             PathTooLongException => ScanErrorKind.PathTooLong,
+            IOException io when IsNetworkError(io.HResult) => ScanErrorKind.Network,
             IOException => ScanErrorKind.IO,
             _ => ScanErrorKind.Unknown,
         };
 
         return new NodeError(kind, exception.Message);
     }
+
+    /// <summary>
+    /// Determines whether an HRESULT wraps a Windows network error, such as a share that went away.
+    /// </summary>
+    /// <param name="result">The HRESULT.</param>
+    /// <returns><see langword="true"/> for network errors.</returns>
+    private static bool IsNetworkError(int result) =>
+        (result & unchecked((int)0xFFFF0000)) == unchecked((int)0x80070000)
+        && (result & 0xFFFF) is 51 or 53 or 59 or 64 or 67 or 121 or 1222 or 1231;
 }

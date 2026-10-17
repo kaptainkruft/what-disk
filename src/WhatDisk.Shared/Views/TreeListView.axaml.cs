@@ -55,6 +55,9 @@ public partial class TreeListView : UserControl
     /// <summary>The view model the view is subscribed to.</summary>
     private MainWindowViewModel? _viewModel;
 
+    /// <summary>The window whose focus changes are tracked.</summary>
+    private TopLevel? _topLevel;
+
     /// <summary>The context menu's Open With submenu, filled when the menu opens.</summary>
     private MenuItem? _openWithItem;
 
@@ -111,8 +114,6 @@ public partial class TreeListView : UserControl
         RowsList.AddHandler(DragDrop.DragOverEvent, OnRowsDragOver);
         RowsList.AddHandler(DragDrop.DragLeaveEvent, OnRowsDragLeave);
         RowsList.AddHandler(DragDrop.DropEvent, OnRowsDrop);
-        RowsList.AddHandler(GotFocusEvent, OnRowsGotFocus, handledEventsToo: true);
-        RowsList.AddHandler(LostFocusEvent, OnRowsLostFocus, handledEventsToo: true);
         _dragTimer.Tick += OnDragTimerTick;
     }
 
@@ -277,26 +278,28 @@ public partial class TreeListView : UserControl
         _capabilityItems.Clear();
         _openWithItem = new MenuItem { Header = "Open With" };
         _capabilityItems.Add((_openWithItem, ShellCapabilities.OpenWith));
+        var platform = viewModel.Platform;
+        var keys = platform.Shortcuts;
         var menu = new ContextMenu
         {
             Items =
             {
-                Item("Open", viewModel.OpenCommand, ItemShortcuts.Open, ShellCapabilities.Open),
+                Item("Open", viewModel.OpenCommand, keys.Open, ShellCapabilities.Open),
                 _openWithItem,
                 new Separator(),
-                Item("Show in Finder", viewModel.RevealCommand, ItemShortcuts.Reveal, ShellCapabilities.Reveal),
-                Item("Quick Look", viewModel.QuickLookCommand, ItemShortcuts.QuickLook, ShellCapabilities.QuickLook),
-                Item("Get Info", viewModel.GetInfoCommand, ItemShortcuts.GetInfo, ShellCapabilities.ShowInfo),
+                Item($"Show in {platform.FileManagerName}", viewModel.RevealCommand, keys.Reveal, ShellCapabilities.Reveal),
+                Item("Quick Look", viewModel.QuickLookCommand, keys.QuickLook, ShellCapabilities.QuickLook),
+                Item(platform.InfoCommandName, viewModel.GetInfoCommand, keys.GetInfo, ShellCapabilities.ShowInfo),
                 new Separator(),
-                Item("Copy", viewModel.CopyItemsCommand, ItemShortcuts.Copy, ShellCapabilities.CopyItems),
-                Item("Copy Path", viewModel.CopyPathCommand, ItemShortcuts.CopyPath, ShellCapabilities.CopyText),
+                Item("Copy", viewModel.CopyItemsCommand, keys.Copy, ShellCapabilities.CopyItems),
+                Item("Copy Path", viewModel.CopyPathCommand, keys.CopyPath, ShellCapabilities.CopyText),
                 new Separator(),
-                Item("Expand All Beneath", viewModel.ExpandAllCommand, ItemShortcuts.ExpandAll),
-                Item("Collapse All Beneath", viewModel.CollapseAllCommand, ItemShortcuts.CollapseAll),
-                Item("Rescan", viewModel.RescanCommand, ItemShortcuts.Rescan),
+                Item("Expand All Beneath", viewModel.ExpandAllCommand, keys.ExpandAll),
+                Item("Collapse All Beneath", viewModel.CollapseAllCommand, keys.CollapseAll),
+                Item("Rescan", viewModel.RescanCommand, keys.Rescan),
                 new Separator(),
-                Item("Move to Trash", viewModel.MoveToTrashCommand, ItemShortcuts.MoveToTrash, ShellCapabilities.Trash),
-                Item("Delete Immediately\u2026", viewModel.DeleteImmediatelyCommand, ItemShortcuts.DeleteImmediately),
+                Item($"Move to {platform.TrashName}", viewModel.MoveToTrashCommand, keys.MoveToTrash, ShellCapabilities.Trash),
+                Item($"{platform.PermanentDeleteName}\u2026", viewModel.DeletePermanentlyCommand, keys.DeletePermanently),
             },
         };
         menu.Opening += OnContextMenuOpening;
@@ -307,7 +310,7 @@ public partial class TreeListView : UserControl
         };
         return menu;
 
-        MenuItem Item(string header, ICommand command, KeyGesture gesture, ShellCapabilities? capability = null)
+        MenuItem Item(string header, ICommand command, KeyGesture? gesture, ShellCapabilities? capability = null)
         {
             var item = new MenuItem { Header = header, Command = command, InputGesture = gesture };
             if (capability is { } required)
@@ -367,27 +370,46 @@ public partial class TreeListView : UserControl
         return true;
     }
 
-    /// <summary>
-    /// Marks the tree as the active pane when it gains keyboard focus.
-    /// </summary>
-    /// <param name="sender">The list.</param>
-    /// <param name="e">The event.</param>
-    private void OnRowsGotFocus(object? sender, FocusChangedEventArgs e) => _viewModel?.IsTreeActive = true;
+    /// <inheritdoc/>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _topLevel = TopLevel.GetTopLevel(this);
+        _topLevel?.AddHandler(GotFocusEvent, OnWindowGotFocus, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _topLevel?.RemoveHandler(GotFocusEvent, OnWindowGotFocus);
+        _topLevel = null;
+        base.OnDetachedFromVisualTree(e);
+    }
 
     /// <summary>
-    /// Marks the tree as inactive when focus moves elsewhere in the window. Focus moving to a menu, a dialog or another
-    /// application leaves the tree active, so that the menu's commands still apply to the selection.
+    /// Tracks whether the tree is the active pane as keyboard focus moves around the window: focus in the tree makes it
+    /// active, focus in another control (such as the path box) makes it inactive, and focus in a menu (including a
+    /// menu bar drawn in the window) leaves it as it was, so the menu's commands still apply to the selection. Focus
+    /// in menus, dialogs and other windows outside this window does not reach here, and also leaves it as it was.
     /// </summary>
-    /// <param name="sender">The list.</param>
+    /// <param name="sender">The window.</param>
     /// <param name="e">The event.</param>
-    private void OnRowsLostFocus(object? sender, RoutedEventArgs e) => Dispatcher.UIThread.Post(() =>
+    private void OnWindowGotFocus(object? sender, FocusChangedEventArgs e)
     {
-        if (TopLevel.GetTopLevel(this) is { } window && window.FocusManager?.GetFocusedElement() is Visual focused
-            && TopLevel.GetTopLevel(focused) == window && !RowsList.IsVisualAncestorOf(focused) && focused != RowsList)
+        if (_viewModel is not { } viewModel || e.Source is not Visual focused)
         {
-            _viewModel?.IsTreeActive = false;
+            return;
         }
-    });
+
+        if (focused == RowsList || RowsList.IsVisualAncestorOf(focused))
+        {
+            viewModel.IsTreeActive = true;
+        }
+        else if (focused.FindAncestorOfType<Menu>(includeSelf: true) is null)
+        {
+            viewModel.IsTreeActive = false;
+        }
+    }
 
     /// <summary>
     /// Expands or collapses the row that was double-clicked.
@@ -404,8 +426,9 @@ public partial class TreeListView : UserControl
 
     /// <summary>
     /// Implements the tree's keys: Right expands or moves to the first child, Left collapses or moves to the parent,
-    /// Option with Right or Left expands or collapses everything beneath, Space toggles Quick Look, Shift+F10 opens the
-    /// context menu, and the item shortcuts run their commands when the platform has no menu bar to handle them.
+    /// Shift+F10 or the Menu key opens the context menu, the platform's extra keys (Space for Quick Look and ⌘↓ on
+    /// macOS, numeric-keypad * on Windows) run their commands, and the item shortcuts run their commands when the
+    /// platform has no native menu bar to handle them.
     /// </summary>
     /// <param name="sender">The list.</param>
     /// <param name="e">The key event.</param>
@@ -416,7 +439,7 @@ public partial class TreeListView : UserControl
             return;
         }
 
-        if (ItemShortcuts.ContextMenu.Matches(e) || (e.Key == Key.Apps && e.KeyModifiers == KeyModifiers.None))
+        if (viewModel.Platform.Shortcuts.ContextMenu.Matches(e) || (e.Key == Key.Apps && e.KeyModifiers == KeyModifiers.None))
         {
             e.Handled = OpenContextMenu();
             return;
@@ -468,14 +491,20 @@ public partial class TreeListView : UserControl
     /// <returns>The command, or <see langword="null"/> when the key has no item command here.</returns>
     private ICommand? FindCommand(MainWindowViewModel viewModel, KeyEventArgs e)
     {
-        if (ItemShortcuts.QuickLook.Matches(e))
+        var keys = viewModel.Platform.Shortcuts;
+        if (keys.QuickLook?.Matches(e) == true)
         {
             return viewModel.QuickLookCommand;
         }
 
-        if (ItemShortcuts.OpenAlternate.Matches(e))
+        if (keys.OpenAlternate?.Matches(e) == true)
         {
             return viewModel.OpenCommand;
+        }
+
+        if (keys.ExpandAllAlternate?.Matches(e) == true)
+        {
+            return viewModel.ExpandAllCommand;
         }
 
         if (TopLevel.GetTopLevel(this) is { } topLevel && NativeMenu.GetIsNativeMenuExported(topLevel))
@@ -483,22 +512,22 @@ public partial class TreeListView : UserControl
             return null;
         }
 
-        (KeyGesture Gesture, ICommand Command)[] shortcuts =
+        (KeyGesture? Gesture, ICommand Command)[] shortcuts =
         [
-            (ItemShortcuts.Open, viewModel.OpenCommand),
-            (ItemShortcuts.Reveal, viewModel.RevealCommand),
-            (ItemShortcuts.QuickLookMenu, viewModel.QuickLookCommand),
-            (ItemShortcuts.GetInfo, viewModel.GetInfoCommand),
-            (ItemShortcuts.Copy, viewModel.CopyItemsCommand),
-            (ItemShortcuts.CopyPath, viewModel.CopyPathCommand),
-            (ItemShortcuts.SelectAll, viewModel.SelectAllCommand),
-            (ItemShortcuts.ExpandAll, viewModel.ExpandAllCommand),
-            (ItemShortcuts.CollapseAll, viewModel.CollapseAllCommand),
-            (ItemShortcuts.Rescan, viewModel.RescanCommand),
-            (ItemShortcuts.MoveToTrash, viewModel.MoveToTrashCommand),
-            (ItemShortcuts.DeleteImmediately, viewModel.DeleteImmediatelyCommand),
+            (keys.Open, viewModel.OpenCommand),
+            (keys.Reveal, viewModel.RevealCommand),
+            (keys.QuickLookMenu, viewModel.QuickLookCommand),
+            (keys.GetInfo, viewModel.GetInfoCommand),
+            (keys.Copy, viewModel.CopyItemsCommand),
+            (keys.CopyPath, viewModel.CopyPathCommand),
+            (keys.SelectAll, viewModel.SelectAllCommand),
+            (keys.ExpandAll, viewModel.ExpandAllCommand),
+            (keys.CollapseAll, viewModel.CollapseAllCommand),
+            (keys.Rescan, viewModel.RescanCommand),
+            (keys.MoveToTrash, viewModel.MoveToTrashCommand),
+            (keys.DeletePermanently, viewModel.DeletePermanentlyCommand),
         ];
-        return Array.Find(shortcuts, shortcut => shortcut.Gesture.Matches(e)).Command;
+        return Array.Find(shortcuts, shortcut => shortcut.Gesture?.Matches(e) == true).Command;
     }
 
     /// <summary>
@@ -649,7 +678,8 @@ public partial class TreeListView : UserControl
 
         e.DragEffects = mode == TransferMode.Move ? DragDropEffects.Move : DragDropEffects.Copy;
         e.Handled = true;
-        await viewModel.DropAsync(rows, target, e.KeyModifiers.HasFlag(ItemShortcuts.CopyDragModifier), e.KeyModifiers.HasFlag(ItemShortcuts.MoveDragModifier));
+        var keys = viewModel.Platform.Shortcuts;
+        await viewModel.DropAsync(rows, target, e.KeyModifiers.HasFlag(keys.CopyDragModifier), e.KeyModifiers.HasFlag(keys.MoveDragModifier));
     }
 
     /// <summary>
@@ -688,7 +718,9 @@ public partial class TreeListView : UserControl
     /// <param name="modifiers">The modifier keys.</param>
     /// <returns>The operation, or <see langword="null"/> when the drop is not allowed.</returns>
     private TransferMode? GetDropMode(TreeRowViewModel[] rows, TreeRowViewModel? target, KeyModifiers modifiers) =>
-        _viewModel?.GetDropMode(rows, target, modifiers.HasFlag(ItemShortcuts.CopyDragModifier), modifiers.HasFlag(ItemShortcuts.MoveDragModifier));
+        _viewModel is { Platform.Shortcuts: var keys } viewModel
+            ? viewModel.GetDropMode(rows, target, modifiers.HasFlag(keys.CopyDragModifier), modifiers.HasFlag(keys.MoveDragModifier))
+            : null;
 
     /// <summary>
     /// Highlights the row that would receive a drop.

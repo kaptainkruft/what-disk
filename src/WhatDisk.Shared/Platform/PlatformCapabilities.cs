@@ -38,6 +38,38 @@ public sealed record PlatformCapabilities
     public string DirectoryNoun { get; init; } = "Folder";
 
     /// <summary>
+    /// Gets the keyboard shortcuts and drag modifiers for actions on items.
+    /// </summary>
+    public ShortcutScheme Shortcuts { get; init; } = ShortcutScheme.ForCurrentPlatform;
+
+    /// <summary>
+    /// Gets the name of the platform's file manager, as in "Show in Finder" or "Show in File Explorer".
+    /// </summary>
+    public string FileManagerName { get; init; } = "File Manager";
+
+    /// <summary>
+    /// Gets the name of the place deleted items go to, for example <c>Trash</c> or <c>Recycle Bin</c>.
+    /// </summary>
+    public string TrashName { get; init; } = "Trash";
+
+    /// <summary>
+    /// Gets the name of the file manager's information window command, for example <c>Get Info</c> or <c>Properties</c>.
+    /// </summary>
+    public string InfoCommandName { get; init; } = "Properties";
+
+    /// <summary>
+    /// Gets the name of the command that deletes without the Trash, for example <c>Delete Immediately</c> or
+    /// <c>Delete Permanently</c>.
+    /// </summary>
+    public string PermanentDeleteName { get; init; } = "Delete Permanently";
+
+    /// <summary>
+    /// Gets a value indicating whether the platform has an application menu (macOS), which holds About; elsewhere the
+    /// window's menu bar has a Help menu for it, and menu titles have access keys.
+    /// </summary>
+    public bool HasApplicationMenu { get; init; }
+
+    /// <summary>
     /// Gets capabilities suitable for an unidentified platform.
     /// </summary>
     public static PlatformCapabilities Generic { get; } = new()

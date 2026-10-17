@@ -1,12 +1,14 @@
 # Turns each platform's build into its installable package and uploads it as package-<platform name>.
 # Each platform's scripts folder provides build/<scripts>/package.sh <app-directory> <version> <name> <output>.
+# Packaging runs on the platform's "package-runner" when it names one (packaging needs no particular architecture,
+# and the packaging tools may be missing from the build runner), otherwise on its "runner".
 name: Package
 
 on:
   workflow_call:
     inputs:
       platforms:
-        description: JSON array of platforms ({ "name", "scripts", "arch", "runner" }), as in .github/platforms.json
+        description: JSON array of platforms ({ "name", "scripts", "arch", "runner", optional "package-runner" }), as in .github/platforms.json
         type: string
         required: true
       version:
@@ -20,11 +22,14 @@ permissions:
 jobs:
   package:
     name: Package (${{ matrix.platform.name }})
-    runs-on: ${{ matrix.platform.runner }}
+    runs-on: ${{ matrix.platform['package-runner'] || matrix.platform.runner }}
     strategy:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(inputs.platforms) }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8

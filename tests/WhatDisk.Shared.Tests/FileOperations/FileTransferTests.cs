@@ -190,6 +190,85 @@ public sealed class FileTransferTests : IDisposable
     }
 
     /// <summary>
+    /// Read-only files, and folders without write permission, are deleted too (on Windows, Git repositories are full
+    /// of read-only files).
+    /// </summary>
+    [Fact]
+    public void Delete_RemovesReadOnlyItems()
+    {
+        var tree = MakeTree("locked");
+        File.SetAttributes(Path.Join(tree, "a.txt"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Join(tree, "inner", "b.txt"), FileAttributes.ReadOnly);
+        new DirectoryInfo(Path.Join(tree, "inner")).Attributes |= FileAttributes.ReadOnly;
+
+        FileTransfer.Delete(tree);
+
+        Assert.False(Directory.Exists(tree));
+    }
+
+    /// <summary>
+    /// On Windows, a file another program has open cannot be renamed; the move fails cleanly instead of leaving a
+    /// copy behind (copying would succeed but removing the original would not).
+    /// </summary>
+    /// <returns>A task that completes when the move has been attempted.</returns>
+    [Fact]
+    public async Task Move_OfAnItemInUse_FailsWithoutDuplicating()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows prevents renaming open files.");
+        var source = MakeTree("src/photos");
+        var file = Path.Join(source, "a.txt");
+        var destination = Directory.CreateDirectory(Path.Join(_temp.FullName, "dest")).FullName;
+
+        IReadOnlyList<TransferResult> results;
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            results = await _transfer.TransferAsync([file], destination, TransferMode.Move, sameVolume: true, NoConflicts, null, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(TransferOutcome.Failed, Assert.Single(results).Outcome);
+        Assert.True(File.Exists(file));
+        Assert.False(File.Exists(Path.Join(destination, "a.txt")));
+    }
+
+    /// <summary>
+    /// On Windows, a junction is moved as a link (its target is untouched) and is copied as a link where links can be
+    /// created; where they cannot, the copy fails without leaving a partial copy.
+    /// </summary>
+    /// <returns>A task that completes when the transfers have finished.</returns>
+    [Fact]
+    public async Task Junctions_AreMovedAndCopiedAsLinks()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Junctions exist on Windows only.");
+        var target = MakeTree("target");
+        var folder = Directory.CreateDirectory(Path.Join(_temp.FullName, "holder")).FullName;
+        var junction = Path.Join(folder, "junction");
+        using (var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", ["/c", "mklink", "/J", junction, target]) { UseShellExecute = false, CreateNoWindow = true })!)
+        {
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+        }
+
+        var moved = Directory.CreateDirectory(Path.Join(_temp.FullName, "moved")).FullName;
+        var move = await _transfer.TransferAsync([junction], moved, TransferMode.Move, sameVolume: true, NoConflicts, null, TestContext.Current.CancellationToken);
+        Assert.Equal(TransferOutcome.Completed, Assert.Single(move).Outcome);
+        Assert.NotNull(new DirectoryInfo(Path.Join(moved, "junction")).LinkTarget);
+        Assert.True(File.Exists(Path.Join(target, "a.txt")));
+
+        var copies = Directory.CreateDirectory(Path.Join(_temp.FullName, "copies")).FullName;
+        var copy = Assert.Single(await _transfer.TransferAsync([moved], copies, TransferMode.Copy, sameVolume: true, NoConflicts, null, TestContext.Current.CancellationToken));
+        if (copy.Outcome == TransferOutcome.Completed)
+        {
+            Assert.NotNull(new DirectoryInfo(Path.Join(copies, "moved", "junction")).LinkTarget);
+        }
+        else
+        {
+            Assert.Equal(TransferOutcome.Failed, copy.Outcome);
+            Assert.False(Directory.Exists(Path.Join(copies, "moved")));
+        }
+
+        Assert.True(File.Exists(Path.Join(target, "a.txt")));
+    }
+
+    /// <summary>
     /// Deletes the temporary directory.
     /// </summary>
     public void Dispose() => _temp.Delete(recursive: true);

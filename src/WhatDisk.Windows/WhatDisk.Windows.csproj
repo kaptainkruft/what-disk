@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The Windows head: the Avalonia Win32 backend plus Windows-specific services (GetFileInformationByHandleEx
+    enumeration, volume discovery, shell icons and type names, and the Recycle Bin, File Explorer, Properties and
+    clipboard actions).
+
+    Publish for one architecture, for example:
+      dotnet publish src/WhatDisk.Windows -c Release -r win-x64
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>WhatDisk</AssemblyName>
+    <RootNamespace>WhatDisk.Windows</RootNamespace>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Publish as a Native AOT executable: faster start-up, lower memory use and no .NET runtime to install.
+         Use -p:PublishAot=false for a conventional (JIT) self-contained build. -->
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Win32" />
+    <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.HarfBuzz" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WhatDisk.Shared\WhatDisk.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WhatDisk.Windows.Tests" />
+  </ItemGroup>
+</Project>

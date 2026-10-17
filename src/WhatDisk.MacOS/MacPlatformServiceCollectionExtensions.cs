@@ -24,6 +24,12 @@ internal static class MacPlatformServiceCollectionExtensions
         PathComparison = StringComparison.OrdinalIgnoreCase,
         ByteUnits = ByteUnitConvention.PowersOf1000,
         DirectoryNoun = "Folder",
+        Shortcuts = ShortcutScheme.MacOS,
+        FileManagerName = "Finder",
+        TrashName = "Trash",
+        InfoCommandName = "Get Info",
+        PermanentDeleteName = "Delete Immediately",
+        HasApplicationMenu = true,
     };
 
     /// <summary>

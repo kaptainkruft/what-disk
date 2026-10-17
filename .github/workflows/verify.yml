@@ -1,0 +1,53 @@
+# Verification run: builds, smoke tests, tests and packages every platform in .github/platforms.json as version
+# 0.0.0-ci, without tagging the commit or publishing anything. Use it to try a branch (for example a new platform's
+# scripts) before running the release pipeline. Run it from the Actions tab.
+name: Verify
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  platforms:
+    name: Read the platform matrix
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.platforms.outputs.platforms }}
+      timestamp: ${{ steps.timestamp.outputs.timestamp }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read the platform matrix
+        id: platforms
+        run: echo "platforms=$(jq -c . .github/platforms.json)" >>"$GITHUB_OUTPUT"
+      - name: Record the build time (UTC)
+        id: timestamp
+        run: echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: platforms
+    uses: ./.github/workflows/build.yml
+    with:
+      platforms: ${{ needs.platforms.outputs.platforms }}
+      version-prefix: 0.0.0
+      version-suffix: ci
+      build-timestamp: ${{ needs.platforms.outputs.timestamp }}
+
+  test:
+    name: Test
+    needs: platforms
+    uses: ./.github/workflows/test.yml
+    with:
+      platforms: ${{ needs.platforms.outputs.platforms }}
+      version-prefix: 0.0.0
+      version-suffix: ci
+
+  package:
+    name: Package
+    needs: [platforms, build]
+    uses: ./.github/workflows/package.yml
+    with:
+      platforms: ${{ needs.platforms.outputs.platforms }}
+      version: 0.0.0-ci

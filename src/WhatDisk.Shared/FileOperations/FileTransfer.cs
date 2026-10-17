@@ -138,10 +138,30 @@ public sealed class FileTransfer(StringComparison pathComparison = StringCompari
     }
 
     /// <summary>
-    /// Deletes an item for good. A symbolic link is removed without touching what it points to.
+    /// Deletes an item for good. A symbolic link or junction is removed without touching what it points to. Read-only
+    /// items (common on Windows, for example in Git repositories) are deleted too.
     /// </summary>
     /// <param name="path">The item.</param>
     public static void Delete(string path)
+    {
+        try
+        {
+            DeleteOnce(path);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Read-only files (and, on Unix, folders without write permission) refuse deletion; clear the flag and
+            // try again. A genuine permission problem fails the second attempt too.
+            ClearReadOnly(path);
+            DeleteOnce(path);
+        }
+    }
+
+    /// <summary>
+    /// Deletes an item without special handling.
+    /// </summary>
+    /// <param name="path">The item.</param>
+    private static void DeleteOnce(string path)
     {
         var info = new FileInfo(path);
         if (info.LinkTarget is not null || !IsRealDirectory(path))
@@ -159,6 +179,33 @@ public sealed class FileTransfer(StringComparison pathComparison = StringCompari
         }
 
         Directory.Delete(path, recursive: true);
+    }
+
+    /// <summary>
+    /// Clears the read-only attribute of an item and, for a real directory, of everything inside it (without
+    /// following links).
+    /// </summary>
+    /// <param name="path">The item.</param>
+    private static void ClearReadOnly(string path)
+    {
+        var info = new FileInfo(path);
+        if (info.Exists || Directory.Exists(path) || info.LinkTarget is not null)
+        {
+            if ((info.Attributes & FileAttributes.ReadOnly) != 0)
+            {
+                info.Attributes &= ~FileAttributes.ReadOnly;
+            }
+        }
+
+        if (!IsRealDirectory(path))
+        {
+            return;
+        }
+
+        foreach (var child in Directory.EnumerateFileSystemEntries(path, "*", AllEntries))
+        {
+            ClearReadOnly(child);
+        }
     }
 
     /// <summary>
@@ -209,9 +256,11 @@ public sealed class FileTransfer(StringComparison pathComparison = StringCompari
                 Rename(source, destination);
                 return 0;
             }
-            catch (IOException)
+            catch (IOException exception) when (IsCrossDevice(exception, source, destination))
             {
-                // The volumes differ after all (for example through a firmlink); fall back to copying.
+                // The volumes differ after all (for example through a firmlink, or a volume mounted in a folder);
+                // fall back to copying. Other failures, such as an item open in another program, are reported:
+                // copying would only leave a duplicate behind.
             }
         }
 
@@ -245,13 +294,67 @@ public sealed class FileTransfer(StringComparison pathComparison = StringCompari
     /// <param name="destination">Its new path.</param>
     private static void Rename(string source, string destination)
     {
-        if (IsRealDirectory(source))
+        // Directory links (symbolic links and junctions) are renamed as directories, which moves the link itself.
+        if ((new FileInfo(source).Attributes & FileAttributes.Directory) != 0)
         {
             Directory.Move(source, destination);
         }
         else
         {
             File.Move(source, destination);
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a failed rename failed because the source and destination are on different volumes.
+    /// </summary>
+    /// <param name="exception">The failure.</param>
+    /// <param name="source">The item.</param>
+    /// <param name="destination">Its new path.</param>
+    /// <returns><see langword="true"/> when the item has to be copied instead.</returns>
+    private static bool IsCrossDevice(IOException exception, string source, string destination)
+    {
+        const int NotSameDevice = unchecked((int)0x80070011); // Windows: ERROR_NOT_SAME_DEVICE
+        const int CrossDeviceLink = 18; // Unix: EXDEV
+        return exception.HResult == NotSameDevice
+            || (!OperatingSystem.IsWindows() && exception.HResult == CrossDeviceLink)
+            || !string.Equals(Path.GetPathRoot(source), Path.GetPathRoot(destination), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Copies a symbolic link or junction as a link. Where links cannot be created (on Windows without Developer Mode
+    /// or administrator rights), a link to a file is copied as the file it points to; a link to a folder fails the
+    /// item rather than copying a tree that may be huge or loop.
+    /// </summary>
+    /// <param name="source">The link.</param>
+    /// <param name="destination">The copy's path.</param>
+    /// <param name="target">Where the link points.</param>
+    /// <param name="isDirectory">Whether the link points to a folder.</param>
+    /// <param name="copied">The running total of bytes copied.</param>
+    /// <param name="onBytes">Receives the running total.</param>
+    private static void CopyLink(string source, string destination, string target, bool isDirectory, ref long copied, Action<long> onBytes)
+    {
+        try
+        {
+            if (isDirectory)
+            {
+                Directory.CreateSymbolicLink(destination, target);
+            }
+            else
+            {
+                File.CreateSymbolicLink(destination, target);
+            }
+        }
+        catch (Exception exception) when (OperatingSystem.IsWindows() && exception is UnauthorizedAccessException or IOException)
+        {
+            if (isDirectory || new FileInfo(source).ResolveLinkTarget(returnFinalTarget: true) is not FileInfo { Exists: true } resolved)
+            {
+                throw new IOException($"The link \u201C{Path.GetFileName(source)}\u201D could not be copied: creating links needs Developer Mode or administrator rights.", exception);
+            }
+
+            File.Copy(resolved.FullName, destination, overwrite: false);
+            copied += resolved.Length;
+            onBytes(copied);
         }
     }
 
@@ -269,15 +372,7 @@ public sealed class FileTransfer(StringComparison pathComparison = StringCompari
         var info = new FileInfo(source);
         if (info.LinkTarget is { } target)
         {
-            if ((info.Attributes & FileAttributes.Directory) != 0)
-            {
-                Directory.CreateSymbolicLink(destination, target);
-            }
-            else
-            {
-                File.CreateSymbolicLink(destination, target);
-            }
-
+            CopyLink(source, destination, target, (info.Attributes & FileAttributes.Directory) != 0, ref copied, onBytes);
             return;
         }
 

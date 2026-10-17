@@ -15,13 +15,22 @@ public static class PathUtilities
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var candidate = ExpandHomeDirectory(path.Trim());
-        if (OperatingSystem.IsWindows() && candidate is [var drive, ':'] && char.IsAsciiLetter(drive))
+        if (OperatingSystem.IsWindows())
         {
-            // "C:" on its own means the root of the drive, not its current directory.
-            candidate += Path.DirectorySeparatorChar;
+            // Paths copied from File Explorer ("Copy as path") arrive in quotes, and a quoted drive root passed on the
+            // command line ("D:\") arrives as D:" under Windows argument rules. Quotes are never part of a Windows
+            // path. Environment variables such as %USERPROFILE% are expanded as File Explorer's address bar does.
+            candidate = Environment.ExpandEnvironmentVariables(candidate.Trim().Trim('"').Trim());
+            ArgumentException.ThrowIfNullOrWhiteSpace(candidate, nameof(path));
+            if (candidate is [var drive, ':'] && char.IsAsciiLetter(drive))
+            {
+                // "C:" on its own means the root of the drive, not its current directory.
+                candidate += Path.DirectorySeparatorChar;
+            }
         }
 
-        return TrimTrailingSeparator(Path.GetFullPath(candidate));
+        var full = TrimTrailingSeparator(Path.GetFullPath(candidate));
+        return OperatingSystem.IsWindows() ? UpperCaseDriveLetter(full) : full;
     }
 
     /// <summary>
@@ -55,6 +64,37 @@ public static class PathUtilities
     /// <param name="path">The path to trim.</param>
     /// <returns>The trimmed path.</returns>
     public static string TrimTrailingSeparator(string path) => Path.TrimEndingDirectorySeparator(path);
+
+    /// <summary>
+    /// Upper-cases the drive letter of a Windows path ("c:\x" becomes "C:\x"), as File Explorer shows it, so that
+    /// paths typed in either case look alike.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <returns>The path with an upper-case drive letter.</returns>
+    public static string UpperCaseDriveLetter(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return path is [var drive, ':', ..] && char.IsAsciiLetterLower(drive) ? char.ToUpperInvariant(drive) + path[1..] : path;
+    }
+
+    /// <summary>
+    /// Determines whether a path is a network path (<c>\\server\share</c>), as opposed to a local path that uses the
+    /// <c>\\?\</c> or <c>\\.\</c> device prefixes.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <returns><see langword="true"/> for a network path.</returns>
+    public static bool IsNetworkPath(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return path.StartsWith(@"\\", StringComparison.Ordinal)
+            && !path.StartsWith(@"\\?\", StringComparison.Ordinal)
+            && !path.StartsWith(@"\\.\", StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Determines whether <paramref name="path"/> is equal to <paramref name="root"/> or lies beneath it.

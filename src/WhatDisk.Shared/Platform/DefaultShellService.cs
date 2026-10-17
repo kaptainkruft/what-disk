@@ -13,7 +13,7 @@ public class DefaultShellService : IShellService
 
     /// <inheritdoc/>
     public virtual Task MoveToTrashAsync(string path, CancellationToken cancellationToken) =>
-        throw new NotSupportedException("Moving items to the Trash is not supported on this platform.");
+        throw new NotSupportedException("Moving items to the Trash or Recycle Bin is not supported on this platform.");
 
     /// <inheritdoc/>
     public virtual void Open(IReadOnlyList<string> paths)

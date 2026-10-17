@@ -231,7 +231,7 @@ public sealed partial class MainWindowViewModel
         var paths = SelectedPaths();
         RunShellAction("copy the paths", () =>
         {
-            _shell.CopyText(string.Join('\n', paths));
+            _shell.CopyText(string.Join(Environment.NewLine, paths));
             StatusText = $"Copied {DisplayFormat.Quantity(paths.Count, "path", "paths")} to the clipboard";
         });
     }
@@ -314,8 +314,8 @@ public sealed partial class MainWindowViewModel
     /// Deletes the selected items permanently, asking first when they are large or many.
     /// </summary>
     /// <returns>A task that completes when the items have been deleted.</returns>
-    [RelayCommand(CanExecute = nameof(CanDeleteImmediately))]
-    private Task DeleteImmediatelyAsync() => DeleteSelectionAsync(permanently: true);
+    [RelayCommand(CanExecute = nameof(CanDeletePermanently))]
+    private Task DeletePermanentlyAsync() => DeleteSelectionAsync(permanently: true);
 
     /// <summary>
     /// Deletes the selected items, either to the Trash or permanently.
@@ -337,8 +337,8 @@ public sealed partial class MainWindowViewModel
             var what = items.Length == 1 ? $"“{items[0].Name}”" : DisplayFormat.Quantity(items.Length, "item", "items");
             var amount = $"{_sizes.Format(bytes)} in {DisplayFormat.Quantity(files, "file", "files")}";
             var request = permanently
-                ? new ConfirmationRequest($"Delete {what} immediately?", $"{amount} will be deleted permanently. This can’t be undone.", "Delete", IsDestructive: true)
-                : new ConfirmationRequest($"Move {what} to the Trash?", $"{amount} will be moved to the Trash, from where it can be restored.", "Move to Trash", IsDestructive: false);
+                ? new ConfirmationRequest($"Delete {what} {PermanentDeleteAdverb()}?", $"{amount} will be deleted permanently. This can’t be undone.", "Delete", IsDestructive: true)
+                : new ConfirmationRequest($"Move {what} to the {Platform.TrashName}?", $"{amount} will be moved to the {Platform.TrashName}, from where it can be restored.", $"Move to {Platform.TrashName}", IsDestructive: false);
             if (!await _dialogs.ConfirmAsync(request))
             {
                 return;
@@ -356,7 +356,7 @@ public sealed partial class MainWindowViewModel
                     break;
                 }
 
-                StatusText = permanently ? $"Deleting “{item.Name}”…" : $"Moving “{item.Name}” to the Trash…";
+                StatusText = permanently ? $"Deleting “{item.Name}”…" : $"Moving “{item.Name}” to the {Platform.TrashName}…";
                 try
                 {
                     var path = item.FullPath;
@@ -380,10 +380,18 @@ public sealed partial class MainWindowViewModel
 
             var summary = permanently
                 ? $"Deleted {DisplayFormat.Quantity(done, "item", "items")} ({_sizes.Format(bytes)})"
-                : $"Moved {DisplayFormat.Quantity(done, "item", "items")} to the Trash ({_sizes.Format(bytes)})";
+                : $"Moved {DisplayFormat.Quantity(done, "item", "items")} to the {Platform.TrashName} ({_sizes.Format(bytes)})";
             return Summarise(summary, failures);
         });
     }
+
+    /// <summary>
+    /// Gets the adverb of the platform's permanent-delete command for questions: "immediately" for "Delete
+    /// Immediately" on macOS, "permanently" for "Delete Permanently" on Windows.
+    /// </summary>
+    /// <returns>The adverb.</returns>
+    private string PermanentDeleteAdverb() =>
+        Platform.PermanentDeleteName.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [_, .., var last] ? last.ToLowerInvariant() : "permanently";
 
     /// <summary>
     /// Runs a file operation: marks the view model busy, allows Stop to cancel it, then refreshes every pane and
@@ -457,7 +465,7 @@ public sealed partial class MainWindowViewModel
     {
         var path = result.Destination!;
         var name = Path.GetFileName(path);
-        if (result.Replaced && destination.Children.FirstOrDefault(child => child.Name == name && !ReferenceEquals(child, item)) is { } replaced)
+        if (result.Replaced && destination.Children.FirstOrDefault(child => string.Equals(child.Name, name, Platform.PathComparison) && !ReferenceEquals(child, item)) is { } replaced)
         {
             RemoveFromTree(replaced);
         }
@@ -548,7 +556,7 @@ public sealed partial class MainWindowViewModel
         {
             OpenCommand, OpenWithCommand, RevealCommand, QuickLookCommand, GetInfoCommand, CopyItemsCommand,
             CopyPathCommand, SelectAllCommand, ExpandAllCommand, CollapseAllCommand, RescanCommand, MoveToTrashCommand,
-            DeleteImmediatelyCommand,
+            DeletePermanentlyCommand,
         })
         {
             command.NotifyCanExecuteChanged();
@@ -707,5 +715,5 @@ public sealed partial class MainWindowViewModel
     /// Determines whether Delete Immediately is enabled.
     /// </summary>
     /// <returns><see langword="true"/> when enabled.</returns>
-    private bool CanDeleteImmediately() => CanModifySelection();
+    private bool CanDeletePermanently() => CanModifySelection();
 }

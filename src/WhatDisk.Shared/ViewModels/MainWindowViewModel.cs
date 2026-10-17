@@ -603,7 +603,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <returns>The options.</returns>
     private ScanOptions CreateOptions(string[] targets)
     {
-        var isNetwork = targets.Any(target => target.StartsWith(@"\\", StringComparison.Ordinal)
+        var isNetwork = targets.Any(target => PathUtilities.IsNetworkPath(target)
             || Volumes.Any(volume => volume.IsNetwork && PathUtilities.IsSameOrDescendant(target, volume.MountPoint, Platform.PathComparison)));
         return new ScanOptions { MaxDegreeOfParallelism = isNetwork ? 32 : ScanOptions.DefaultParallelism };
     }

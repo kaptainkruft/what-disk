@@ -1,12 +1,13 @@
 # Runs every test project on each platform's runner (so each architecture is tested on its own hardware) and uploads
-# the results as test-results-<platform name>.
+# the results as test-results-<platform name>. Tests of another platform's head run their portable parts and skip
+# the rest, so every runner builds and checks all of the code.
 name: Test
 
 on:
   workflow_call:
     inputs:
       platforms:
-        description: JSON array of platforms ({ "name", "scripts", "arch", "runner" }), as in .github/platforms.json
+        description: JSON array of platforms ({ "name", "scripts", "arch", "runner", optional "package-runner" }), as in .github/platforms.json
         type: string
         required: true
       version-prefix:
@@ -29,6 +30,10 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(inputs.platforms) }}
+    # The test script is bash, which Windows runners provide through Git Bash.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6

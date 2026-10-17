@@ -2,7 +2,9 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using WhatDisk.ViewModels;
 using WhatDisk.Views.Controls;
@@ -45,7 +47,9 @@ public partial class TreeListView : UserControl
         TreeRowPanel.SetColumnLayout(this, _layout);
         BuildHeader();
         RowsList.DoubleTapped += OnRowsDoubleTapped;
-        RowsList.KeyDown += OnRowsKeyDown;
+        // Tunnelling: the list's scroll viewer would otherwise consume Left and Right (horizontal scrolling) before a
+        // bubbling handler could see them. Up and Down are left to the list.
+        RowsList.AddHandler(KeyDownEvent, OnRowsKeyDown, RoutingStrategies.Tunnel);
     }
 
     /// <summary>
@@ -53,6 +57,23 @@ public partial class TreeListView : UserControl
     /// </summary>
     /// <param name="row">The row.</param>
     public void ScrollIntoView(TreeRowViewModel row) => RowsList.ScrollIntoView(row);
+
+    /// <summary>
+    /// Scrolls a row into view and gives it keyboard focus. When the row's container is not created yet, focusing
+    /// waits until the list has been laid out.
+    /// </summary>
+    /// <param name="row">The row.</param>
+    public void FocusRow(TreeRowViewModel row)
+    {
+        RowsList.ScrollIntoView(row);
+        if (RowsList.ContainerFromItem(row) is { } container)
+        {
+            container.Focus(NavigationMethod.Directional);
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() => RowsList.ContainerFromItem(row)?.Focus(NavigationMethod.Directional), DispatcherPriority.Loaded);
+    }
 
     /// <inheritdoc/>
     protected override void OnDataContextChanged(EventArgs e)

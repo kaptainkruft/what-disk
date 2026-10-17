@@ -87,7 +87,55 @@ public sealed class MainWindowViewModelTests : IDisposable
         Assert.Equal("4.60 KB", ViewModel.Chart.TotalText);
         Assert.StartsWith("Scanned 3 folders, 4 files", ViewModel.StatusText, StringComparison.Ordinal);
         Assert.Null(ViewModel.ErrorSummary);
-        Assert.False(ViewModel.Details.HasSelection);
+        Assert.Same(rows[0], ViewModel.SelectedRow);
+        Assert.Equal("Test Disk", ViewModel.Details.Title);
+    }
+
+    /// <summary>
+    /// When a scan finishes, the first row is selected and the view is asked to focus it.
+    /// </summary>
+    /// <returns>A task that completes when the scan has finished.</returns>
+    [Fact]
+    public async Task StartScan_FocusesTheFirstRowWhenDone()
+    {
+        var focused = new List<TreeRowViewModel>();
+        ViewModel.FocusRequested += (_, row) => focused.Add(row);
+        ViewModel.PathText = _fs.Root;
+
+        await ViewModel.StartScanCommand.ExecuteAsync(null);
+
+        Assert.Same(ViewModel.Tree.Rows[0], Assert.Single(focused));
+        Assert.Same(ViewModel.Tree.Rows[0], ViewModel.SelectedRow);
+    }
+
+    /// <summary>
+    /// A row the user selected while the scan was running keeps the selection and receives the focus.
+    /// </summary>
+    /// <returns>A task that completes when the scan has finished.</returns>
+    [Fact]
+    public async Task StartScan_KeepsASelectionMadeDuringTheScan()
+    {
+        using var release = new ManualResetEventSlim();
+        _fs.OnRead = (path, token) =>
+        {
+            if (path.EndsWith("music", StringComparison.Ordinal))
+            {
+                release.Wait(token);
+            }
+        };
+        TreeRowViewModel? focused = null;
+        ViewModel.FocusRequested += (_, row) => focused = row;
+        ViewModel.PathText = _fs.Root;
+        var scan = ViewModel.StartScanCommand.ExecuteAsync(null);
+        await Eventually.True(() => ViewModel.Tree.Rows.Any(static row => row.Name == "photos"), "the photos row is visible");
+
+        var photos = ViewModel.Tree.Rows.Single(static row => row.Name == "photos");
+        ViewModel.SelectedRow = photos;
+        release.Set();
+        await scan;
+
+        Assert.Same(photos, ViewModel.SelectedRow);
+        Assert.Same(photos, focused);
     }
 
     /// <summary>
@@ -250,6 +298,10 @@ public sealed class MainWindowViewModelTests : IDisposable
 
         Assert.Equal([_fs.PathOf("photos"), _fs.PathOf("music")], ViewModel.Session!.Roots.Select(static root => root.RootPath));
         await ViewModel.WaitForChartAsync();
+        Assert.Equal($"File types in {_fs.PathOf("photos")}", ViewModel.Chart.Title);
+
+        ViewModel.SelectedRow = null;
+        await ViewModel.WaitForChartAsync();
         Assert.Equal("File types in all scanned volumes", ViewModel.Chart.Title);
     }
 
@@ -373,7 +425,7 @@ public sealed class MainWindowViewModelTests : IDisposable
         await ViewModel.StartScanCommand.ExecuteAsync(null);
 
         Assert.Equal(_fs.PathOf("music"), ViewModel.Tree.Rows[0].Name);
-        Assert.Null(ViewModel.SelectedRow);
+        Assert.Same(ViewModel.Tree.Rows[0], ViewModel.SelectedRow);
     }
 
     /// <summary>

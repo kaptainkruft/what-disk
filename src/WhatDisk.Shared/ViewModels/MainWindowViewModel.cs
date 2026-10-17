@@ -119,6 +119,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public event EventHandler<TreeRowViewModel>? ScrollIntoViewRequested;
 
     /// <summary>
+    /// Raised when the view should give a row keyboard focus, so the arrow keys work straight away (after a scan).
+    /// </summary>
+    public event EventHandler<TreeRowViewModel>? FocusRequested;
+
+    /// <summary>
     /// Gets the interval between refreshes of the panes while a scan runs.
     /// </summary>
     public static TimeSpan RefreshInterval { get; } = TimeSpan.FromMilliseconds(200);
@@ -488,8 +493,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 IsScanning = false;
                 Refresh();
+                FocusTree();
             }
         }
+    }
+
+    /// <summary>
+    /// Selects the first row (unless the user already selected one during the scan) and asks the view to focus it.
+    /// </summary>
+    private void FocusTree()
+    {
+        if ((SelectedRow ?? (Tree.Rows.Count > 0 ? Tree.Rows[0] : null)) is not { } row)
+        {
+            return;
+        }
+
+        SelectedRow = row;
+        FocusRequested?.Invoke(this, row);
     }
 
     /// <summary>

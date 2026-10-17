@@ -28,12 +28,14 @@ public partial class MainWindow : Window
         if (_viewModel is not null)
         {
             _viewModel.ScrollIntoViewRequested -= OnScrollIntoViewRequested;
+            _viewModel.FocusRequested -= OnFocusRequested;
         }
 
         _viewModel = DataContext as MainWindowViewModel;
         if (_viewModel is not null)
         {
             _viewModel.ScrollIntoViewRequested += OnScrollIntoViewRequested;
+            _viewModel.FocusRequested += OnFocusRequested;
         }
     }
 
@@ -58,4 +60,11 @@ public partial class MainWindow : Window
     /// <param name="sender">The view model.</param>
     /// <param name="row">The row.</param>
     private void OnScrollIntoViewRequested(object? sender, TreeRowViewModel row) => TreeList.ScrollIntoView(row);
+
+    /// <summary>
+    /// Gives a tree row keyboard focus when the view model asks (after a scan), so the arrow keys work at once.
+    /// </summary>
+    /// <param name="sender">The view model.</param>
+    /// <param name="row">The row.</param>
+    private void OnFocusRequested(object? sender, TreeRowViewModel row) => TreeList.FocusRow(row);
 }

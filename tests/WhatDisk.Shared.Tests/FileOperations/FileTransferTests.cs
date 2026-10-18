@@ -269,9 +269,34 @@ public sealed class FileTransferTests : IDisposable
     }
 
     /// <summary>
-    /// Deletes the temporary directory.
+    /// Deletes the temporary directory. Links to folders are removed first: a recursive delete on Windows unmounts
+    /// junctions with <c>DeleteVolumeMountPoint</c>, which fails on a junction to a plain folder ("The parameter is
+    /// incorrect").
     /// </summary>
-    public void Dispose() => _temp.Delete(recursive: true);
+    public void Dispose()
+    {
+        RemoveFolderLinks(_temp);
+        _temp.Delete(recursive: true);
+    }
+
+    /// <summary>
+    /// Removes the links to folders (symbolic links and junctions) inside a folder, without following them.
+    /// </summary>
+    /// <param name="folder">The folder.</param>
+    private static void RemoveFolderLinks(DirectoryInfo folder)
+    {
+        foreach (var child in folder.GetDirectories())
+        {
+            if (child.LinkTarget is null)
+            {
+                RemoveFolderLinks(child);
+            }
+            else
+            {
+                child.Delete();
+            }
+        }
+    }
 
     /// <summary>
     /// A conflict handler for operations that must not meet conflicts.

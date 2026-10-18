@@ -606,7 +606,7 @@ public sealed class TreeInteractionTests : IDisposable
     /// </summary>
     /// <param name="relative">The relative path.</param>
     /// <returns>The absolute path.</returns>
-    private string PathOf(string relative) => Path.Join(_base, relative);
+    private string PathOf(string relative) => Path.Join(_base, relative.Replace('/', Path.DirectorySeparatorChar));
 
     /// <summary>
     /// Writes a file, creating its folders.

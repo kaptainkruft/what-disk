@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       platforms:
-        description: JSON array of platforms ({ "name", "scripts", "arch", "runner", optional "package-runner" }), as in .github/platforms.json
+        description: JSON array of platforms ({ "name", "scripts", "arch", "runner" }), as in .github/platforms.json
         type: string
         required: true
       version-prefix:

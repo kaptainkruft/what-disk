@@ -1,7 +1,7 @@
 ; Inno Setup script for the WhatDisk installer, compiled by build/windows/package.sh, which defines:
 ;   AppVersion      the full version, for example 0.1.3-alpha
 ;   NumericVersion  the version without its prerelease label, for example 0.1.3
-;   Arch            x64 or arm64
+;   Arch            x64
 ;   SourceDir       the published WhatDisk folder
 ;   OutputDir       where to write the installer
 ;   OutputBaseName  the installer's file name without .exe

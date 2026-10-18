@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Publishes WhatDisk for Windows as a Native AOT executable for one architecture. Runs in Git Bash on Windows: Native
-# AOT cannot compile for another operating system.
+# Publishes WhatDisk for Windows as a Native AOT executable for x64 (the only Windows architecture released). Runs in
+# Git Bash on Windows: Native AOT cannot compile for another operating system.
 #
-#   build/windows/publish.sh <x64|arm64> <output-directory>
+#   build/windows/publish.sh x64 <output-directory>
 #
 # Environment (all optional; set by the release pipeline):
 #   VERSION_PREFIX   e.g. 0.1.3         (default 0.0.0)
@@ -13,11 +13,11 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-arch="${1:?usage: publish.sh <x64|arm64> <output-directory>}"
-output="${2:?usage: publish.sh <x64|arm64> <output-directory>}"
+arch="${1:?usage: publish.sh x64 <output-directory>}"
+output="${2:?usage: publish.sh x64 <output-directory>}"
 case "$arch" in
-  x64 | arm64) ;;
-  *) echo "error: architecture must be x64 or arm64 (got '$arch')" >&2; exit 2 ;;
+  x64) ;;
+  *) echo "error: the only Windows architecture is x64 (got '$arch')" >&2; exit 2 ;;
 esac
 
 mkdir -p "$output"

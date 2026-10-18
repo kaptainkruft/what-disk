@@ -20,9 +20,8 @@ WHATDISK_SCREENSHOTS=/tmp/whatdisk-shots dotnet test --project tests/WhatDisk.Sh
 dotnet publish src/WhatDisk.MacOS -c Release -r osx-arm64
 dotnet publish src/WhatDisk.MacOS -c Release -r osx-x64
 
-# Publish a Native AOT executable (x64 or Arm64), on Windows.
+# Publish a Native AOT executable (x64), on Windows.
 dotnet publish src/WhatDisk.Windows -c Release -r win-x64
-dotnet publish src/WhatDisk.Windows -c Release -r win-arm64
 ```
 
 Publishing writes `WhatDisk.app` (about 34 MB, ad-hoc signed) to

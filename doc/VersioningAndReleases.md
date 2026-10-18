@@ -17,16 +17,15 @@ The version and release time (UTC) are compiled into the application and shown i
 Local builds are versioned `0.0.0-dev` and show "Development build".
 
 The pipeline is composed of reusable workflows, each running as a matrix over the platforms listed in
-`.github/platforms.json`: macOS on Apple silicon and on Intel, and Windows on x64 and on Arm64. Each is built, smoke
-tested and tested on its own kind of runner (`macos-latest`, `macos-15-intel`, `windows-latest` and
-`windows-11-arm`). Every runner runs every test project; tests that need another operating system skip.
+`.github/platforms.json`: macOS on Apple silicon and on Intel, and Windows on x64. Each is built, smoke tested and
+tested on its own kind of runner (`macos-latest`, `macos-15-intel` and `windows-latest`). Every runner runs every test project; tests that need another operating system skip.
 
 | Workflow | Does |
 |---|---|
 | `pipeline.yml` | Computes the version, then runs the four workflows below |
 | `build.yml` | Builds each platform with `build/<scripts>/publish.sh`, then starts the app to scan a folder with `build/<scripts>/smoke-test.sh` |
 | `test.yml` | Runs all tests on each platform |
-| `package.yml` | Packages each build with `build/<scripts>/package.sh` (on the platform's `package-runner` when it names one) |
+| `package.yml` | Packages each build with `build/<scripts>/package.sh` |
 | `release.yml` | Tags the commit and, if requested, publishes the GitHub release |
 | `verify.yml` | Run on its own: builds, smoke tests, tests and packages every platform as `0.0.0-ci` without tagging or releasing, to try a branch first |
 
@@ -34,10 +33,9 @@ On macOS the build is a Native AOT `WhatDisk.app`, packaged separately for each 
 `WhatDisk-<version>-macos-apple-silicon.dmg` and `WhatDisk-<version>-macos-intel.dmg`. Each disk image shows the app
 beside an Applications shortcut, so it installs by dragging.
 
-On Windows the build is a Native AOT `WhatDisk.exe` with its native libraries, packaged for each architecture in two
-forms: `WhatDisk-<version>-windows-x64.zip` (unzip anywhere and run `WhatDisk.exe`) and
+On Windows the build is a Native AOT `WhatDisk.exe` for x64 with its native libraries, packaged in two forms: `WhatDisk-<version>-windows-x64.zip` (unzip anywhere and run `WhatDisk.exe`) and
 `WhatDisk-<version>-windows-x64-setup.exe`, an [Inno Setup](https://jrsoftware.org/isinfo.php) installer that installs
-for the current user without administrator rights, with a Start menu entry and an uninstaller (likewise `windows-arm64`).
+for the current user without administrator rights, with a Start menu entry and an uninstaller.
 Neither is code-signed yet, so Windows SmartScreen asks for confirmation the first time. Every package has a `.sha256`
 checksum beside it.
 
@@ -56,5 +54,4 @@ build/windows/package.sh out/app 0.1.3-alpha windows-x64 out/package
 ```
 
 Adding a platform means adding `publish.sh`, `smoke-test.sh` and `package.sh` scripts under `build/<scripts>/` and an
-entry in `.github/platforms.json` naming the scripts folder, architecture and runner (and, optionally, a different
-`package-runner`). Every workflow step runs in bash, which Windows runners provide through Git Bash.
+entry in `.github/platforms.json` naming the scripts folder, architecture and runner. Every workflow step runs in bash, which Windows runners provide through Git Bash.

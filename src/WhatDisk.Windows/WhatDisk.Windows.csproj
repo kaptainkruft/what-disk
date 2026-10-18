@@ -11,7 +11,7 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>WhatDisk</AssemblyName>
     <RootNamespace>WhatDisk.Windows</RootNamespace>
-    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Publish as a Native AOT executable: faster start-up, lower memory use and no .NET runtime to install.

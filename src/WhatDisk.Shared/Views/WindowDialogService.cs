@@ -5,7 +5,7 @@ using WhatDisk.ViewModels;
 namespace WhatDisk.Views;
 
 /// <summary>
-/// Asks questions with modal windows over the main window.
+/// Asks questions with modal windows over the main window, and shows results in windows the main window owns.
 /// </summary>
 /// <param name="owner">Gets the window that owns the questions.</param>
 public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
@@ -54,5 +54,20 @@ public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
         var answer = await question.ShowAsync(window);
         var resolution = Enum.TryParse<ConflictResolution>(answer, out var parsed) ? parsed : ConflictResolution.Stop;
         return new ConflictDecision(resolution, question.IsChecked);
+    }
+
+    /// <inheritdoc/>
+    public void ShowDuplicates(DuplicateResultsViewModel results)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        var window = new DuplicatesWindow { DataContext = results };
+        if (owner() is { IsVisible: true } main)
+        {
+            window.Show(main);
+        }
+        else
+        {
+            window.Show();
+        }
     }
 }

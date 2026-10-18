@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WhatDisk.Hosting;
 using WhatDisk.Platform;
@@ -8,7 +9,8 @@ using WhatDisk.Volumes;
 namespace WhatDisk.MacOS.Tests;
 
 /// <summary>
-/// Tests that the macOS head registers its platform services ahead of the shared defaults.
+/// Tests that the macOS head registers its platform services ahead of the shared defaults, and configures the runtime
+/// as a macOS app expects.
 /// </summary>
 [SupportedOSPlatform("macos")]
 public sealed class MacPlatformRegistrationTests
@@ -33,5 +35,20 @@ public sealed class MacPlatformRegistrationTests
         Assert.Equal("macOS", platform.PlatformName);
         Assert.False(platform.SupportsMultipleVolumeSelection);
         Assert.IsType<DiskScanner>(services.GetRequiredService<IDiskScanner>());
+    }
+
+    /// <summary>
+    /// The app turns off .NET's advisory file locks, which macOS apps ignore: otherwise opening a file that another
+    /// program has locked (as Chromium-based apps and SQLite databases do) fails as "in use", so the duplicate search
+    /// could not read it and copying it would fail. The Native AOT build compiles in the same setting.
+    /// </summary>
+    [Fact]
+    public void RuntimeConfiguration_DisablesAdvisoryFileLocking()
+    {
+        using var config = JsonDocument.Parse(File.ReadAllText(Path.Join(AppContext.BaseDirectory, "WhatDisk.runtimeconfig.json")));
+
+        var properties = config.RootElement.GetProperty("runtimeOptions").GetProperty("configProperties");
+
+        Assert.True(properties.GetProperty("System.IO.DisableFileLocking").GetBoolean());
     }
 }

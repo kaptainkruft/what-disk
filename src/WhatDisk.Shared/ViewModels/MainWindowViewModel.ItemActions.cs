@@ -556,7 +556,7 @@ public sealed partial class MainWindowViewModel
         {
             OpenCommand, OpenWithCommand, RevealCommand, QuickLookCommand, GetInfoCommand, CopyItemsCommand,
             CopyPathCommand, SelectAllCommand, ExpandAllCommand, CollapseAllCommand, RescanCommand, MoveToTrashCommand,
-            DeletePermanentlyCommand,
+            DeletePermanentlyCommand, FindDuplicatesCommand,
         })
         {
             command.NotifyCanExecuteChanged();

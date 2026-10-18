@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using WhatDisk.Duplicates;
 using WhatDisk.Scanning;
 
 namespace WhatDisk.MacOS.Tests;
@@ -65,6 +66,32 @@ public sealed class MacFileSystemEnumeratorTests : IDisposable
 
         Assert.All(entries, static entry => Assert.Equal(2u, entry.LinkCount));
         Assert.Single(entries.Select(static entry => entry.Identity).Distinct());
+    }
+
+    /// <summary>
+    /// The duplicate search uses the enumerator's identities to compare hard links to the same file once, so a file
+    /// and its hard link are not reported as duplicates of each other, while a real copy is.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [Fact]
+    public async Task DuplicateFinder_ComparesHardLinksOnce()
+    {
+        var original = Path.Join(_temp.FullName, "original.bin");
+        var link = Path.Join(_temp.FullName, "link.bin");
+        var copy = Path.Join(_temp.FullName, "copy.bin");
+        File.WriteAllBytes(original, new byte[5000]);
+        using (var process = Process.Start("/bin/ln", [original, link]))
+        {
+            process.WaitForExit();
+        }
+
+        File.Copy(original, copy);
+        var finder = new DuplicateFinder(_enumerator.GetIdentity);
+
+        var result = await finder.FindAsync([new DuplicateCandidate(original, 5000), new DuplicateCandidate(link, 5000), new DuplicateCandidate(copy, 5000)], null, TestContext.Current.CancellationToken);
+
+        Assert.Equal([copy, link], Assert.Single(result.Sets).Paths);
+        Assert.Equal(1, result.HardLinks);
     }
 
     /// <summary>

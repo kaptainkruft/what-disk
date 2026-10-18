@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using WhatDisk.Duplicates;
 using WhatDisk.Scanning;
 
 namespace WhatDisk.Windows.Tests;
@@ -168,6 +169,27 @@ public sealed class WindowsFileSystemEnumeratorTests : IDisposable
         var junction = _tree.Junction("alias", target);
 
         Assert.Equal(_enumerator.GetCanonicalPath(target), _enumerator.GetCanonicalPath(junction), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The duplicate search uses the enumerator's identities to compare hard links to the same file once (the scan
+    /// cannot tell them apart on Windows), so a file and its hard link are not reported as duplicates of each other,
+    /// while a real copy is.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [Fact]
+    public async Task DuplicateFinder_ComparesHardLinksOnce()
+    {
+        var original = _tree.Write("original.bin", 5000);
+        var link = _tree.HardLink("link.bin", original);
+        var copy = _tree.PathOf("copy.bin");
+        File.Copy(original, copy);
+        var finder = new DuplicateFinder(_enumerator.GetIdentity);
+
+        var result = await finder.FindAsync([new DuplicateCandidate(original, 5000), new DuplicateCandidate(link, 5000), new DuplicateCandidate(copy, 5000)], null, TestContext.Current.CancellationToken);
+
+        Assert.Equal([copy, link], Assert.Single(result.Sets).Paths);
+        Assert.Equal(1, result.HardLinks);
     }
 
     /// <summary>

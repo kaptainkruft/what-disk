@@ -65,6 +65,45 @@ hidden. The system's own context menu is not used on either platform.
 - The view model asks questions through `IDialogService`, so tests answer them without windows. File manager actions
   go through `IShellService`, which reports what the platform supports so unsupported actions are hidden.
 
+### Duplicate finder
+
+Tools › Find Duplicates searches everything the last scan found. It runs as a file operation, so the status bar shows
+its progress and Stop cancels it. While it runs, the volume picker, path box, Browse and Scan are disabled, because a
+new scan would replace the tree being searched. It reads as little as it can:
+
+1. **Length.** The scanned regular files are grouped by length from the scan tree alone. Only lengths shared by two or
+   more files go further, which usually leaves a small part of the scan. Empty files, cloud-only files (`Offline`,
+   which reading would download) and hard links the scan already recognised are left out. Before any file is read,
+   its identity (device and file number, from the head's enumerator) is checked, so hard links to the same data are
+   read once. This matters on Windows, where the scan cannot detect hard links.
+2. **Files up to 1 MiB are hashed.** They are quick to read, so each is read in full and hashed with XXH128
+   (`System.IO.Hashing`), which runs at memory speed and makes an accidental collision vanishingly unlikely (about 1
+   in 10^38 per pair). Files with the same length and hash form a set marked **Hash**.
+3. **Larger files are sampled.** Sixty-four 4 KiB samples are read from each, spread evenly from the start to the last
+   whole sample at the end (256 KiB per file). Files whose samples are all equal form a set marked **Sampled**, and
+   the search stops there, so the results appear without reading every large file in full.
+
+Sampling is much cheaper, but it is not proof. Measured on real folders, about 0.3% of the files that 64 × 4 KiB
+samples matched were not identical: mostly signed binaries that differ only in their code signature. So the
+Duplicates window says how many sets are only sampled and asks for them to be verified before anything is deleted.
+**Verify All by Hash** hashes every sampled set, largest waste first, and a row's context menu has **Verify Set by
+Hash** for its set alone. Hashing confirms a set (its rows switch to Hash and show the hash, keeping the selection),
+drops the files that differ, or splits the set when it held two contents. The largest group keeps the set's number
+and the others get new numbers and follow it, so numbers already noted stay valid. Stop (or closing the window) ends
+hashing, and sets already hashed keep their results. Copy and Export wait until it finishes.
+
+Up to four files are read at a time, enough to keep a solid-state disk busy without making a spinning disk seek
+between too many files. Files are opened for shared reading, so files other programs have open are still compared.
+A file that cannot be read, or whose length changed since the scan, is reported in the results window and left out.
+
+Sets are numbered by the space they waste (length × (copies − 1)), largest first. The Duplicates window lists one row
+per file with its set, full path, size, hash and comparison, and shades every other set. Double-clicking a row shows
+the file in Finder or File Explorer. **Copy CSV** and **Export CSV…** produce the same RFC 4180 text: a header row
+(`SetID,Full Path,Size,Hash,Comparison`), sizes in bytes, an empty hash for sampled files, quotes only where needed,
+and CR LF line ends. The exported file starts with a UTF-8 byte order mark, so spreadsheet programs read non-ASCII
+paths correctly. The save dialog is the system's own, and it starts in Documents (or the Desktop if that is
+unavailable).
+
 ### Windows specifics
 
 - Directories are read with `GetFileInformationByHandleEx` and the `FileIdExtdDirectoryInfo` class, which gives each
@@ -95,5 +134,9 @@ hidden. The system's own context menu is not used on either platform.
   VM and the like) are left out of the volume list, and snapshots are treated as virtual.
 - Icons come from `NSWorkspace` through the Objective-C runtime: per path for volumes, application bundles and
   special folders, per file type otherwise. They load on background threads and are cached.
+- .NET's advisory file locks (`flock`, its Unix emulation of Windows file sharing) are turned off with the
+  `System.IO.DisableFileLocking` runtime option, as macOS apps ignore them. Otherwise files another program holds an
+  exclusive lock on, such as the SQLite databases of Chromium-based apps, could not be read by the duplicate search or
+  copied.
 - Move to Trash uses `NSFileManager`, so the Finder's Put Back works. Show in Finder, Open With and the pasteboard
   use `NSWorkspace` and `NSPasteboard`; Get Info asks the Finder through AppleScript, and Quick Look runs `qlmanage`.

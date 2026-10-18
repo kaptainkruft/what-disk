@@ -419,7 +419,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     /// <param name="cancellationToken">Cancels the dialog.</param>
     /// <returns>A task that completes when the scan finishes, or immediately if the dialog was cancelled.</returns>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanChooseTarget))]
     private async Task BrowseAsync(CancellationToken cancellationToken)
     {
         if (!_folderPicker.IsSupported)
@@ -630,15 +630,21 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Determines whether the Scan button is enabled.
     /// </summary>
-    /// <returns><see langword="true"/> when nothing is being scanned and there is something to scan.</returns>
-    private bool CanStartScan() => !IsScanning && GetTargets().Length > 0;
+    /// <returns><see langword="true"/> when nothing is being scanned or searched and there is something to scan.</returns>
+    private bool CanStartScan() => !IsScanning && CanChooseTarget() && GetTargets().Length > 0;
 
     /// <summary>
     /// Determines whether a volume can be scanned from the volume picker.
     /// </summary>
     /// <param name="volume">The volume.</param>
-    /// <returns><see langword="true"/> when nothing is being scanned.</returns>
-    private bool CanScanVolume(VolumeItemViewModel? volume) => !IsScanning && volume is not null;
+    /// <returns><see langword="true"/> when nothing is being scanned or searched.</returns>
+    private bool CanScanVolume(VolumeItemViewModel? volume) => !IsScanning && CanChooseTarget() && volume is not null;
+
+    /// <summary>
+    /// Determines whether something else may be chosen to scan: not while a duplicate search runs.
+    /// </summary>
+    /// <returns><see langword="true"/> when Browse is enabled.</returns>
+    private bool CanChooseTarget() => !IsFindingDuplicates;
 
     /// <summary>
     /// Sets the path box without disturbing the record of how it was set.

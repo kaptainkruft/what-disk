@@ -4,7 +4,7 @@ using WhatDisk.ViewModels;
 namespace WhatDisk.Tests.Fakes;
 
 /// <summary>
-/// A dialog service that gives scripted answers and records the questions.
+/// A dialog service that gives scripted answers and records the questions and the results it was asked to show.
 /// </summary>
 internal sealed class ScriptedDialogService : IDialogService
 {
@@ -28,6 +28,11 @@ internal sealed class ScriptedDialogService : IDialogService
     /// </summary>
     public List<TransferConflict> Conflicts { get; } = [];
 
+    /// <summary>
+    /// Gets the duplicate search results shown.
+    /// </summary>
+    public List<DuplicateResultsViewModel> DuplicateResults { get; } = [];
+
     /// <inheritdoc/>
     public Task<bool> ConfirmAsync(ConfirmationRequest request)
     {
@@ -41,4 +46,7 @@ internal sealed class ScriptedDialogService : IDialogService
         Conflicts.Add(conflict);
         return Task.FromResult(Conflict);
     }
+
+    /// <inheritdoc/>
+    public void ShowDuplicates(DuplicateResultsViewModel results) => DuplicateResults.Add(results);
 }

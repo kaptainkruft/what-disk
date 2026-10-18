@@ -61,6 +61,27 @@ internal sealed class TempTree : IDisposable
     }
 
     /// <summary>
+    /// Creates a hard link (which needs no special rights) with <c>mklink /H</c>.
+    /// </summary>
+    /// <param name="relative">The link's relative path.</param>
+    /// <param name="target">The file it links to.</param>
+    /// <returns>The link's absolute path.</returns>
+    public string HardLink(string relative, string target)
+    {
+        var path = PathOf(relative);
+        using var process = Process.Start(new ProcessStartInfo("cmd.exe", ["/c", "mklink", "/H", path, target])
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        })!;
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0 && File.Exists(path), $"mklink /H failed: {process.StandardError.ReadToEnd()}");
+        return path;
+    }
+
+    /// <summary>
     /// Deletes the directory.
     /// </summary>
     public void Dispose()

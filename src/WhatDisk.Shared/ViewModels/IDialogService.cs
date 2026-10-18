@@ -3,7 +3,7 @@ using WhatDisk.FileOperations;
 namespace WhatDisk.ViewModels;
 
 /// <summary>
-/// Asks the user questions on behalf of the view models.
+/// Asks the user questions, and shows windows of results, on behalf of the view models.
 /// </summary>
 public interface IDialogService
 {
@@ -20,6 +20,12 @@ public interface IDialogService
     /// <param name="conflict">The conflict.</param>
     /// <returns>The user's decision.</returns>
     Task<ConflictDecision> ResolveConflictAsync(TransferConflict conflict);
+
+    /// <summary>
+    /// Shows the results of a duplicate search in a window of their own, without waiting for it to close.
+    /// </summary>
+    /// <param name="results">The results.</param>
+    void ShowDuplicates(DuplicateResultsViewModel results);
 }
 
 /// <summary>
@@ -32,8 +38,8 @@ public interface IDialogService
 public sealed record ConfirmationRequest(string Title, string Message, string ConfirmText, bool IsDestructive);
 
 /// <summary>
-/// A dialog service that declines every confirmation and skips every conflict, so that nothing destructive happens
-/// when no user interface is attached.
+/// A dialog service that declines every confirmation, skips every conflict and shows nothing, so that nothing
+/// destructive happens when no user interface is attached.
 /// </summary>
 public sealed class DecliningDialogService : IDialogService
 {
@@ -42,4 +48,9 @@ public sealed class DecliningDialogService : IDialogService
 
     /// <inheritdoc/>
     public Task<ConflictDecision> ResolveConflictAsync(TransferConflict conflict) => Task.FromResult(new ConflictDecision(ConflictResolution.Skip));
+
+    /// <inheritdoc/>
+    public void ShowDuplicates(DuplicateResultsViewModel results)
+    {
+    }
 }

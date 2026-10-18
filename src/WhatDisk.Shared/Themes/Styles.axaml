@@ -182,4 +182,33 @@
   <Style Selector="TextBlock.highlighted">
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
+
+  <!-- Duplicates window: rows of each set share a shade, alternating from set to set -->
+  <Style Selector="TextBlock.column-title">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ListBox.duplicates">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.duplicates ListBoxItem">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Height" Value="26" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Grid.duplicate-row.alternate">
+    <Setter Property="Background" Value="{DynamicResource AlternateRowBrush}" />
+  </Style>
+  <Style Selector="Grid.duplicate-row > TextBlock, Grid.duplicate-columns > TextBlock">
+    <Setter Property="Margin" Value="10,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="TextBlock.hash">
+    <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, Monaco, monospace" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
 </Styles>

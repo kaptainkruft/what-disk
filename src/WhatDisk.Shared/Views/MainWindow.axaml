@@ -12,10 +12,10 @@
     <!-- The File, Edit, View and Help menus where the platform has no native menu bar (it hides itself on macOS). -->
     <NativeMenuBar DockPanel.Dock="Top" />
 
-    <!-- What to scan -->
+    <!-- What to scan (disabled while a duplicate search runs, since a new scan would replace the tree it searches) -->
     <Border DockPanel.Dock="Top" Classes="toolbar">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
-        <DropDownButton x:Name="VolumesButton" ToolTip.Tip="Choose a volume to scan">
+        <DropDownButton x:Name="VolumesButton" ToolTip.Tip="Choose a volume to scan" IsEnabled="{Binding !IsFindingDuplicates}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Image Source="{StaticResource WhatDisk.Icon.volume}" Width="16" Height="16" />
             <TextBlock Text="Volumes" VerticalAlignment="Center" />
@@ -28,6 +28,7 @@
         </DropDownButton>
         <TextBox Grid.Column="1"
                  x:Name="PathBox"
+                 IsEnabled="{Binding !IsFindingDuplicates}"
                  Text="{Binding PathText}"
                  PlaceholderText="{Binding PathWatermark}"
                  VerticalContentAlignment="Center">

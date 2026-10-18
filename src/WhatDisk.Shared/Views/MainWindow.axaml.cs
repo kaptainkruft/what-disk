@@ -9,7 +9,7 @@ namespace WhatDisk.Views;
 
 /// <summary>
 /// The single application window: a toolbar to choose what to scan, the results tree, the chart and details panes,
-/// and a status bar. On macOS its File, Edit and View menus appear in the menu bar.
+/// and a status bar. On macOS its File, Edit, View and Tools menus appear in the menu bar.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -75,9 +75,10 @@ public partial class MainWindow : Window
     private void OnFocusRequested(object? sender, TreeRowViewModel row) => TreeList.FocusRow(row);
 
     /// <summary>
-    /// Creates the File, Edit and View menus (and, without an application menu, Help) for the menu bar: the macOS menu
-    /// bar, or a menu bar at the top of the window elsewhere. The item commands are enabled only while the tree is the
-    /// active pane, so that shortcuts such as ⌘C and ⌘⌫ reach the path box when it has focus.
+    /// Creates the File, Edit, View and Tools menus (and, without an application menu, Help) for the menu bar: the
+    /// macOS menu bar, or a menu bar at the top of the window elsewhere. The item commands are enabled only while the
+    /// tree is the active pane, so that shortcuts such as ⌘C and ⌘⌫ reach the path box when it has focus; Find
+    /// Duplicates works on the whole scan and is enabled whenever a scan has finished.
     /// </summary>
     /// <param name="viewModel">The view model whose commands the menus run.</param>
     /// <returns>The menu bar.</returns>
@@ -121,6 +122,9 @@ public partial class MainWindow : Window
         Add(view, "Expand All Beneath", viewModel.ExpandAllCommand, keys.ExpandAll);
         Add(view, "Collapse All Beneath", viewModel.CollapseAllCommand, keys.CollapseAll);
 
+        var tools = new NativeMenu();
+        Add(tools, "Find Duplicates", viewModel.FindDuplicatesCommand, null);
+
         // Where the menu bar is drawn in the window (Windows), the titles get access keys (Alt+F and so on) and About
         // goes in a Help menu; macOS has About in the application menu instead.
         var accessKey = platform.HasApplicationMenu ? string.Empty : "_";
@@ -131,6 +135,7 @@ public partial class MainWindow : Window
                 new NativeMenuItem($"{accessKey}File") { Menu = file },
                 new NativeMenuItem($"{accessKey}Edit") { Menu = edit },
                 new NativeMenuItem($"{accessKey}View") { Menu = view },
+                new NativeMenuItem($"{accessKey}Tools") { Menu = tools },
             },
         };
         if (!platform.HasApplicationMenu)

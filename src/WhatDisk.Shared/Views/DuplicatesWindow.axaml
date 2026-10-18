@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WhatDisk.ViewModels"
+        x:Class="WhatDisk.Views.DuplicatesWindow"
+        x:DataType="vm:DuplicateResultsViewModel"
+        Title="{Binding Title}"
+        Width="1140" Height="640"
+        MinWidth="720" MinHeight="320"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel>
+    <!-- What was found, and how surely -->
+    <Border DockPanel.Dock="Top" Classes="toolbar">
+      <StackPanel Spacing="3">
+        <TextBlock x:Name="SummaryText" Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock x:Name="VerificationText" Classes="small" Classes.warning="{Binding HasSampledSets}"
+                   Text="{Binding VerificationSummary}" TextWrapping="Wrap"
+                   IsVisible="{Binding VerificationSummary, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        <TextBlock Classes="muted small" Text="{Binding Details}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="4" Background="Transparent"
+                    IsVisible="{Binding FailureSummary, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    ToolTip.Tip="{Binding FailureDetails}">
+          <Image Source="{StaticResource WhatDisk.Icon.warning}" Width="14" Height="14" VerticalAlignment="Center" />
+          <TextBlock Classes="warning small" Text="{Binding FailureSummary}" VerticalAlignment="Center" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- Verify, copy and export -->
+    <Border DockPanel.Dock="Bottom" Classes="statusbar">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="VerifyAllButton" Content="Verify All by Hash" Command="{Binding VerifyAllCommand}"
+                  ToolTip.Tip="Hash every file of the sets that only matched on samples, to confirm they are identical" />
+          <Button x:Name="StopButton" Content="Stop" Command="{Binding StopVerifyingCommand}" IsVisible="{Binding IsVerifying}"
+                  ToolTip.Tip="Stop hashing; sets already hashed keep their results" />
+          <Button x:Name="CopyButton" Content="Copy CSV" Command="{Binding CopyCsvCommand}"
+                  ToolTip.Tip="Copy the results to the clipboard as CSV, with a header row" />
+          <Button x:Name="ExportButton" Content="Export CSV…"
+                  ToolTip.Tip="Save the results as a CSV file, with a header row" />
+          <Button Content="Close" IsCancel="True" MinWidth="72" HorizontalContentAlignment="Center" Click="OnCloseClick" />
+        </StackPanel>
+        <TextBlock x:Name="MessageText" Text="{Binding Message}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+
+    <!--
+      One row per file, set by set. Double-clicking a row shows the file in Finder or File Explorer; its context menu
+      hashes the row's set.
+    -->
+    <Grid RowDefinitions="Auto,*">
+      <Border Classes="tree-header" Height="30">
+        <Grid Classes="duplicate-columns" ColumnDefinitions="56,*,96,290,96">
+          <TextBlock Classes="column-title number" Text="Set" />
+          <TextBlock Grid.Column="1" Classes="column-title" Text="Full Path" />
+          <TextBlock Grid.Column="2" Classes="column-title number" Text="Size" />
+          <TextBlock Grid.Column="3" Classes="column-title" Text="Hash (XXH128)" />
+          <TextBlock Grid.Column="4" Classes="column-title" Text="Comparison" />
+        </Grid>
+      </Border>
+
+      <ListBox x:Name="RowsList" Grid.Row="1" Classes="duplicates" ItemsSource="{Binding Rows}" DoubleTapped="OnRowsDoubleTapped">
+        <ListBox.ContextMenu>
+          <ContextMenu x:Name="RowMenu" Opening="OnRowMenuOpening">
+            <MenuItem x:Name="VerifySetItem" Header="Verify Set by Hash" Command="{Binding VerifySetCommand}" />
+          </ContextMenu>
+        </ListBox.ContextMenu>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:DuplicateRowViewModel">
+            <Grid Classes="duplicate-row" Classes.alternate="{Binding IsAlternate}" ColumnDefinitions="56,*,96,290,96">
+              <TextBlock Classes="number" Text="{Binding SetId}" />
+              <TextBlock Grid.Column="1" Text="{Binding Path}" TextTrimming="PrefixCharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+              <TextBlock Grid.Column="2" Classes="number" Text="{Binding SizeText}" ToolTip.Tip="{Binding ExactSizeText}" />
+              <TextBlock Grid.Column="3" Classes="hash" Classes.muted="{Binding IsSampled}" Text="{Binding HashText}" />
+              <TextBlock Grid.Column="4" Classes.warning="{Binding IsSampled}" Text="{Binding ComparisonText}"
+                         ToolTip.Tip="{Binding ComparisonTip}" Background="Transparent" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <TextBlock Grid.Row="1" Classes="empty-hint" Margin="24"
+                 Text="No two files have the same contents." IsVisible="{Binding !HasRows}" />
+    </Grid>
+  </DockPanel>
+</Window>

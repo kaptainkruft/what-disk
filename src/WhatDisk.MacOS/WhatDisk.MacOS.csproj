@@ -30,6 +30,16 @@
     <InternalsVisibleTo Include="WhatDisk.MacOS.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      .NET emulates Windows file sharing on Unix with advisory locks (flock): every open takes one, and fails as "in
+      use" when another program holds an exclusive lock, as Chromium-based apps and SQLite databases often do. macOS
+      itself, the Finder and other apps ignore these locks, so WhatDisk does too; otherwise the duplicate search could
+      not read such files and copying them would fail. Applies to the JIT and Native AOT builds alike.
+    -->
+    <RuntimeHostConfigurationOption Include="System.IO.DisableFileLocking" Value="true" />
+  </ItemGroup>
+
   <!--
     Publishing for a macOS runtime also produces WhatDisk.app beside the published files, for example:
       dotnet publish src/WhatDisk.MacOS -c Release -r osx-arm64

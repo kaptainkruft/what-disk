@@ -225,6 +225,25 @@ public sealed class TreeListModel(ByteSizeFormatter sizes) : ITreeRowOwner
     }
 
     /// <summary>
+    /// Formats every row's values again, including rows of collapsed folders, for example after the size units
+    /// changed, and refreshes the rows shown.
+    /// </summary>
+    public void Reformat()
+    {
+        var pending = new Stack<TreeRowViewModel>(_rootRows);
+        while (pending.TryPop(out var row))
+        {
+            row.InvalidateTexts();
+            foreach (var child in row.ChildRows ?? [])
+            {
+                pending.Push(child);
+            }
+        }
+
+        Refresh();
+    }
+
+    /// <summary>
     /// Adds a row and its visible descendants to <paramref name="output"/> in display order.
     /// </summary>
     /// <param name="row">The row.</param>

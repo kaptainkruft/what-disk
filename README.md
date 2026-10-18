@@ -4,6 +4,8 @@ WhatDisk shows where the space on a disk has gone. It scans a volume or a folder
 
 After a scan, **Tools › Find Duplicates** finds files with the same contents and lists them by set, ready to copy or export as CSV. Files up to 1 MiB are confirmed by hash; larger files are matched quickly by samples and can be verified by hash from the results window. Double-click a file to show it in Finder or File Explorer.
 
+Settings (**WhatDisk › Settings…**, ⌘, on macOS; **Tools › Settings…**, Ctrl+, on Windows) covers appearance, size units, scanning, the duplicate search and delete confirmations. They are saved as JSON that holds only what differs from the defaults, in `~/Library/Application Support/WhatDisk/settings.json` on macOS and `%APPDATA%\WhatDisk\settings.json` on Windows.
+
 It is a MacOS and Windows cross-platform .NET 10 / C# 14 application built with [Avalonia 12](https://avaloniaui.net/).
 
 ## License
@@ -61,14 +63,15 @@ what-disk/
 │   │   ├── FileOperations/       Moving, copying and deleting items, with conflict handling and progress
 │   │   ├── Duplicates/           The duplicate finder (length, then XXH128 hashes up to 1 MiB and samples above),
 │   │   │                         set verification by hash, and the CSV
+│   │   ├── Settings/             The settings catalogue (sections, keys, defaults, ranges) and the JSON settings file
 │   │   ├── Charting/             File-type totals and the pie chart model: top types, "other", stable colours
 │   │   ├── Formatting/           Byte sizes, percentages, counts, durations and timestamps
 │   │   ├── ViewModels/           MVVM view models: main window (with the item actions and Find Duplicates), tree
 │   │   │                         rows and their minimal-change reconciliation, chart, details, volume picker,
 │   │   │                         duplicate results and dialogs
 │   │   ├── Views/                Main window and menu bar, tree list (context menu, keys, drag and drop),
-│   │   │                         chart pane, details pane, volume picker, Duplicates window, question dialogs
-│   │   │                         and About window
+│   │   │                         chart pane, details pane, volume picker, Duplicates and Settings windows,
+│   │   │                         question dialogs and About window
 │   │   │   └── Controls/         Custom controls: tree row panel and column layout, percentage bar,
 │   │   │                         pie chart, legend swatch, platform icon
 │   │   ├── Icons/                Background icon cache and built-in vector icons

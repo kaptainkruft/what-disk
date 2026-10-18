@@ -104,6 +104,44 @@ and CR LF line ends. The exported file starts with a UTF-8 byte order mark, so s
 paths correctly. The save dialog is the system's own, and it starts in Documents (or the Desktop if that is
 unavailable).
 
+### Settings
+
+Settings live in one JSON file with the same format on every platform: `~/Library/Application Support/WhatDisk/settings.json`
+on macOS, `%APPDATA%\WhatDisk\settings.json` on Windows. Like Visual Studio Code's, it holds only what differs from
+the defaults, so a default changed in a later version reaches everyone who has not chosen otherwise:
+
+```jsonc
+{
+  "general": { "theme": "dark" },
+  "scanning": { "threads": 8, "macos": { "showHiddenVolumes": true } },
+  "duplicates": { "hashUpToMiB": 4, "readers": 1 },
+  "deleting": { "confirmAboveFiles": 50, "windows": { "warnWhenNotRecyclable": false } }
+}
+```
+
+- **Catalogue.** `SettingsCatalog` defines every setting once: its section and key, label and description, type
+  (on/off, a number with a range and unit, or a choice), default, and platform. The sections are the file's top-level
+  keys and the settings window's pages, in the same order. A default can follow the platform: sizes are decimal on
+  macOS and binary on Windows, so choosing the platform's own units writes nothing.
+- **Platform settings** sit in their section's `macos` or `windows` subsection of the file. In the window they appear
+  in their section with the others, marked with an asterisk, and only on their platform. A file shared between
+  platforms keeps the other platform's settings untouched.
+- **Reading and writing.** `AppSettings` reads the file with comments and trailing commas allowed, as people edit it
+  by hand. A value of the wrong kind counts as the default, a number out of range is brought into range, and keys
+  this version does not know are kept. An unreadable file leaves every setting at its default and is kept as
+  `settings.invalid.json` before it is first overwritten. Each change is saved at once, written to a temporary file
+  and renamed over the settings file, and setting a value back to its default removes it (and any section left empty).
+  The JSON is handled with `System.Text.Json.Nodes`, which needs no reflection, so the Native AOT builds read it too.
+- **Applying.** Theme and size units apply at once: the app switches its theme variant, and the tree, chart, details
+  and volume list re-format every size. Other settings are read when next needed: scan threads and the network rule
+  at the next scan, the duplicate options at the next search, confirmation thresholds at the next delete, and the
+  macOS volume list and Windows Recycle Bin flags by the platform services.
+- **Window.** Settings is in the application menu on macOS (⌘,) and in Tools on Windows (Ctrl+,). The window has the
+  sections down the left, and for each setting its label, description, path in the file, an editor, and Reset when it
+  differs from the default (marked by an accent bar). Changes apply at once, so there is no OK or Cancel. **Open
+  Settings File** opens the JSON in the default editor, and coming back to the window re-reads it. **Restore
+  Defaults…** resets this platform's settings.
+
 ### Windows specifics
 
 - Directories are read with `GetFileInformationByHandleEx` and the `FileIdExtdDirectoryInfo` class, which gives each

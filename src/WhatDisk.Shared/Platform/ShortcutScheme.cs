@@ -28,6 +28,7 @@ public sealed record ShortcutScheme
         ExpandAll = new KeyGesture(Key.Right, KeyModifiers.Alt),
         CollapseAll = new KeyGesture(Key.Left, KeyModifiers.Alt),
         Rescan = new KeyGesture(Key.R, KeyModifiers.Meta | KeyModifiers.Shift),
+        Settings = new KeyGesture(Key.OemComma, KeyModifiers.Meta),
         MoveToTrash = new KeyGesture(Key.Back, KeyModifiers.Meta),
         DeletePermanently = new KeyGesture(Key.Back, KeyModifiers.Meta | KeyModifiers.Alt),
     };
@@ -54,6 +55,7 @@ public sealed record ShortcutScheme
         ExpandAllAlternate = new KeyGesture(Key.Multiply),
         CollapseAll = new KeyGesture(Key.Left, KeyModifiers.Alt),
         Rescan = new KeyGesture(Key.F5),
+        Settings = new KeyGesture(Key.OemComma, KeyModifiers.Control),
         MoveToTrash = new KeyGesture(Key.Delete),
         DeletePermanently = new KeyGesture(Key.Delete, KeyModifiers.Shift),
     };
@@ -123,4 +125,9 @@ public sealed record ShortcutScheme
 
     /// <summary>Gets the shortcut that opens the context menu from the keyboard (as does the Menu key).</summary>
     public KeyGesture ContextMenu { get; init; } = new(Key.F10, KeyModifiers.Shift);
+
+    /// <summary>
+    /// Gets the key that opens the settings window: ⌘, on macOS, Ctrl+, on Windows.
+    /// </summary>
+    public required KeyGesture Settings { get; init; }
 }

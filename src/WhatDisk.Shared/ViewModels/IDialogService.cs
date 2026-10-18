@@ -26,6 +26,12 @@ public interface IDialogService
     /// </summary>
     /// <param name="results">The results.</param>
     void ShowDuplicates(DuplicateResultsViewModel results);
+
+    /// <summary>
+    /// Shows the settings window, or brings it to the front when it is already open.
+    /// </summary>
+    /// <param name="settings">The settings window's view model, used when the window is not already open.</param>
+    void ShowSettings(SettingsViewModel settings);
 }
 
 /// <summary>
@@ -51,6 +57,11 @@ public sealed class DecliningDialogService : IDialogService
 
     /// <inheritdoc/>
     public void ShowDuplicates(DuplicateResultsViewModel results)
+    {
+    }
+
+    /// <inheritdoc/>
+    public void ShowSettings(SettingsViewModel settings)
     {
     }
 }

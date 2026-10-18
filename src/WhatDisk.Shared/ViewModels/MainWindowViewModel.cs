@@ -9,13 +9,14 @@ using WhatDisk.FileOperations;
 using WhatDisk.Formatting;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 
 namespace WhatDisk.ViewModels;
 
 /// <summary>
 /// The main window: choosing what to scan, running the scan and presenting its results in the tree, chart and
 /// details panes. While a scan runs, every pane is refreshed from the live scan tree every
-/// <see cref="RefreshInterval"/>.
+/// <see cref="RefreshInterval"/> (or as often as the settings say).
 /// </summary>
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
@@ -88,6 +89,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <param name="shell">The file manager's actions; <see langword="null"/> for opening only.</param>
     /// <param name="dialogs">Asks the user to confirm and resolve conflicts; <see langword="null"/> declines everything.</param>
     /// <param name="enumerator">Describes items added to the tree; <see langword="null"/> for the portable enumerator.</param>
+    /// <param name="settings">The app's settings; <see langword="null"/> for the defaults, kept in memory.</param>
     public MainWindowViewModel(
         IDiskScanner scanner,
         Volumes.IVolumeService volumeService,
@@ -97,7 +99,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         IFileTypeProvider? fileTypes = null,
         IShellService? shell = null,
         IDialogService? dialogs = null,
-        IFileSystemEnumerator? enumerator = null)
+        IFileSystemEnumerator? enumerator = null,
+        AppSettings? settings = null)
     {
         ArgumentNullException.ThrowIfNull(scanner);
         ArgumentNullException.ThrowIfNull(volumeService);
@@ -110,7 +113,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _folderPicker = folderPicker;
         _timeProvider = timeProvider;
         Platform = platform;
-        _sizes = new ByteSizeFormatter(platform.ByteUnits);
+        Settings = settings ?? new AppSettings(platform, null);
+        Settings.Changed += OnSettingChanged;
+        _sizes = new ByteSizeFormatter(SizeUnits());
         _fileTypes = fileTypes ?? new DefaultFileTypeProvider();
         _fileTypeTotals = new FileTypeAggregator(_fileTypes);
         _shell = shell ?? new DefaultShellService();
@@ -138,9 +143,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public event EventHandler<TreeRowViewModel>? FocusRequested;
 
     /// <summary>
-    /// Gets the interval between refreshes of the panes while a scan runs.
+    /// Gets the default interval between refreshes of the panes while a scan runs; the
+    /// <see cref="SettingsCatalog.Scanning.RefreshMilliseconds"/> setting changes it.
     /// </summary>
-    public static TimeSpan RefreshInterval { get; } = TimeSpan.FromMilliseconds(200);
+    public static TimeSpan RefreshInterval { get; } = TimeSpan.FromMilliseconds(SettingsCatalog.Scanning.RefreshMilliseconds.DefaultFor(PlatformCapabilities.Generic));
 
     /// <summary>
     /// Gets the platform conventions.
@@ -370,6 +376,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _session?.Dispose();
+        Settings.Changed -= OnSettingChanged;
         Tree.Reconciling -= OnTreeReconciling;
         Tree.Reconciled -= OnTreeReconciled;
     }
@@ -576,13 +583,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Refreshes the panes every <see cref="RefreshInterval"/> until cancelled.
+    /// Refreshes the panes at the interval the settings choose (<see cref="RefreshInterval"/> by default) until
+    /// cancelled.
     /// </summary>
     /// <param name="cancellationToken">Stops the loop.</param>
     /// <returns>A task that completes when the loop stops.</returns>
     private async Task RunRefreshLoopAsync(CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(RefreshInterval, _timeProvider);
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Settings.Get(SettingsCatalog.Scanning.RefreshMilliseconds)), _timeProvider);
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
@@ -597,7 +605,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Chooses scan options for the targets: more parallelism for network locations, whose latency dominates.
+    /// Chooses scan options for the targets from the settings: more parallelism for network locations, whose latency
+    /// dominates, and whether network shares inside them are scanned.
     /// </summary>
     /// <param name="targets">The paths to scan.</param>
     /// <returns>The options.</returns>
@@ -605,7 +614,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         var isNetwork = targets.Any(target => PathUtilities.IsNetworkPath(target)
             || Volumes.Any(volume => volume.IsNetwork && PathUtilities.IsSameOrDescendant(target, volume.MountPoint, Platform.PathComparison)));
-        return new ScanOptions { MaxDegreeOfParallelism = isNetwork ? 32 : ScanOptions.DefaultParallelism };
+        var threads = Settings.Get(SettingsCatalog.Scanning.Threads);
+        return new ScanOptions
+        {
+            MaxDegreeOfParallelism = isNetwork ? Settings.Get(SettingsCatalog.Scanning.NetworkThreads) : threads > 0 ? threads : ScanOptions.DefaultParallelism,
+            IncludeNetworkVolumes = Settings.Get(SettingsCatalog.Scanning.IncludeNetworkVolumes),
+        };
     }
 
     /// <summary>

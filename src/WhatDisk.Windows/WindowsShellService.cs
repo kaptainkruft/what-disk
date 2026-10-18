@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Runtime.Versioning;
 using WhatDisk.Platform;
+using WhatDisk.Settings;
 using WhatDisk.Windows.Interop;
 
 namespace WhatDisk.Windows;
@@ -9,8 +10,12 @@ namespace WhatDisk.Windows;
 /// The Windows shell's actions on items: the Recycle Bin, Open With, File Explorer windows, Properties and the
 /// clipboard. Windows has no Quick Look, so previews are not offered.
 /// </summary>
+/// <param name="settings">
+/// The settings, which can turn off the warning before items that cannot be recycled are deleted permanently;
+/// <see langword="null"/> for the defaults.
+/// </param>
 [SupportedOSPlatform("windows")]
-internal sealed unsafe class WindowsShellService : DefaultShellService
+internal sealed unsafe class WindowsShellService(AppSettings? settings = null) : DefaultShellService
 {
     /// <summary>The name of the clipboard format that tells File Explorer whether a paste copies or moves.</summary>
     private const string PreferredDropEffectFormat = "Preferred DropEffect";
@@ -22,7 +27,8 @@ internal sealed unsafe class WindowsShellService : DefaultShellService
 
     /// <summary>
     /// Moves an item to the Recycle Bin. Items that cannot be recycled (on network shares, or larger than the Recycle
-    /// Bin) are deleted permanently only after Windows has warned and the user has agreed.
+    /// Bin) are deleted permanently only after Windows has warned and the user has agreed, unless the settings turn the
+    /// warning off.
     /// </summary>
     /// <param name="path">The item.</param>
     /// <param name="cancellationToken">Unused: the shell operation cannot be interrupted.</param>
@@ -30,9 +36,10 @@ internal sealed unsafe class WindowsShellService : DefaultShellService
     public override Task MoveToTrashAsync(string path, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
+        var flags = RecycleFlags(settings?.Get(SettingsCatalog.Deleting.WarnWhenNotRecyclable) ?? true);
         return StaThread.RunAsync(() =>
         {
-            Recycle(path);
+            Recycle(path, flags);
             return true;
         });
     }
@@ -210,10 +217,22 @@ internal sealed unsafe class WindowsShellService : DefaultShellService
     }
 
     /// <summary>
+    /// Gets the <c>SHFileOperation</c> flags for moving to the Recycle Bin: allow undo, without the shell's own
+    /// confirmation, error and progress windows (WhatDisk asks first itself), and, unless turned off, with the warning
+    /// before an item that cannot be recycled is deleted permanently.
+    /// </summary>
+    /// <param name="warnWhenNotRecyclable">Whether Windows warns before deleting an item it cannot recycle.</param>
+    /// <returns>The flags.</returns>
+    internal static ushort RecycleFlags(bool warnWhenNotRecyclable) => (ushort)(
+        Shell32.FileOperationAllowUndo | Shell32.FileOperationNoConfirmation | Shell32.FileOperationNoErrorUI | Shell32.FileOperationSilent
+        | (warnWhenNotRecyclable ? Shell32.FileOperationWantNukeWarning : 0));
+
+    /// <summary>
     /// Deletes an item to the Recycle Bin with <c>SHFileOperation</c>.
     /// </summary>
     /// <param name="path">The item.</param>
-    private static void Recycle(string path)
+    /// <param name="flags">The operation's flags, from <see cref="RecycleFlags"/>.</param>
+    private static void Recycle(string path, ushort flags)
     {
         var name = Path.GetFileName(PathUtilities.TrimTrailingSeparator(path));
         var from = path + "\0\0";
@@ -223,8 +242,7 @@ internal sealed unsafe class WindowsShellService : DefaultShellService
             {
                 Function = Shell32.FileOperationDelete,
                 From = pointer,
-                Flags = Shell32.FileOperationAllowUndo | Shell32.FileOperationNoConfirmation | Shell32.FileOperationNoErrorUI
-                    | Shell32.FileOperationSilent | Shell32.FileOperationWantNukeWarning,
+                Flags = flags,
             };
             var result = Shell32.SHFileOperation(ref operation);
             if (operation.AnyOperationsAborted != 0)

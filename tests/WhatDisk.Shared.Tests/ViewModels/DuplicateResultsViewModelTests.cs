@@ -51,7 +51,7 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
         Assert.Equal("2,000,000 bytes", results.Rows[0].ExactSizeText);
         Assert.Equal("2 sets of duplicates: 5 files. Keeping one file of each set would free 4.00 MB.", results.Summary);
         Assert.Equal("1 set confirmed by hash; 1 set of files over 1 MiB only matched on 64 samples of 4 KiB. Verify by hash before deleting anything.", results.VerificationSummary);
-        Assert.Equal("Of 100 files, 7 shared a size with another: 4 up to 1 MiB were hashed, and 3 larger ones were compared by samples. Left out: 3 empty files, 1 cloud-only file, 2 extra hard links.", results.Details);
+        Assert.Equal("Of 100 files, 7 shared a size with another: 4 up to 1 MiB were hashed, and 3 larger ones were compared by 64 samples of 4 KiB. Left out: 3 empty files, 1 cloud-only file, 2 extra hard links.", results.Details);
         Assert.Equal("WhatDisk Duplicates 2026-10-17 0930.csv", results.SuggestedFileName);
         Assert.True(results.HasSampledSets);
         Assert.Null(results.FailureSummary);

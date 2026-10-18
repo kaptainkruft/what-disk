@@ -5,6 +5,7 @@ using WhatDisk.FileOperations;
 using WhatDisk.Formatting;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 
 namespace WhatDisk.ViewModels;
 
@@ -14,10 +15,6 @@ namespace WhatDisk.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel
 {
-    /// <summary>
-    /// Deleting more files than this asks for confirmation first.
-    /// </summary>
-    public const int DeleteConfirmationFiles = 10;
 
     /// <summary>The file manager's actions.</summary>
     private readonly IShellService _shell;
@@ -54,9 +51,17 @@ public sealed partial class MainWindowViewModel
     public ShellCapabilities ShellCapabilities => _shell.Capabilities;
 
     /// <summary>
-    /// Gets the size above which deleting asks for confirmation first: 10 MB in the platform's units.
+    /// Gets the number of files above which deleting asks for confirmation first (10 unless the settings say
+    /// otherwise).
     /// </summary>
-    public long DeleteConfirmationBytes => Platform.ByteUnits == ByteUnitConvention.PowersOf1024 ? 10L * 1024 * 1024 : 10_000_000;
+    public int DeleteConfirmationFiles => Settings.Get(SettingsCatalog.Deleting.ConfirmAboveFiles);
+
+    /// <summary>
+    /// Gets the size above which deleting asks for confirmation first: 10 MB unless the settings say otherwise, in the
+    /// size units chosen (so 10 MiB with binary units).
+    /// </summary>
+    public long DeleteConfirmationBytes =>
+        Settings.Get(SettingsCatalog.Deleting.ConfirmAboveMegabytes) * (_sizes.Convention == ByteUnitConvention.PowersOf1024 ? 1024L * 1024 : 1_000_000);
 
     /// <summary>
     /// Lists the applications that can open the selected items, the default first.

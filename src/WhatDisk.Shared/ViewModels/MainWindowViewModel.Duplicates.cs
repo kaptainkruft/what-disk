@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WhatDisk.Duplicates;
 using WhatDisk.Formatting;
+using WhatDisk.Settings;
 
 namespace WhatDisk.ViewModels;
 
@@ -10,9 +11,6 @@ namespace WhatDisk.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel
 {
-    /// <summary>Finds the duplicates; created on first use.</summary>
-    private DuplicateFinder? _duplicateFinder;
-
     /// <summary>
     /// Gets a value indicating whether a duplicate search is running. Choosing something else to scan (the volume
     /// picker, the path box, Browse and Scan) is disabled meanwhile, since a new scan would replace the tree being
@@ -25,9 +23,9 @@ public sealed partial class MainWindowViewModel
     public partial bool IsFindingDuplicates { get; private set; }
 
     /// <summary>
-    /// Finds the files with identical contents among everything scanned (files up to 1 MiB by hash, larger ones by
-    /// samples), showing progress in the status bar (Stop cancels), then shows the results in the Duplicates window,
-    /// where sampled sets can be confirmed by hash.
+    /// Finds the files with identical contents among everything scanned (smaller files by hash, larger ones by
+    /// samples, as the settings choose), showing progress in the status bar (Stop cancels), then shows the results in
+    /// the Duplicates window, where sampled sets can be confirmed by hash, at once when the settings say so.
     /// </summary>
     /// <returns>A task that completes when the search has finished and the results are shown.</returns>
     [RelayCommand(CanExecute = nameof(CanFindDuplicates))]
@@ -38,7 +36,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        var finder = _duplicateFinder ??= new DuplicateFinder(_enumerator.GetIdentity);
+        var finder = new DuplicateFinder(_enumerator.GetIdentity, DuplicateOptions());
         var roots = session.Roots;
         DuplicateSearchResult? result = null;
         IsFindingDuplicates = true;
@@ -53,7 +51,12 @@ public sealed partial class MainWindowViewModel
 
         if (result is not null)
         {
-            _dialogs.ShowDuplicates(new DuplicateResultsViewModel(result, string.Join(", ", session.Request.Targets), _sizes, _shell, finder, Platform.FileManagerName, _timeProvider.GetLocalNow()));
+            var results = new DuplicateResultsViewModel(result, string.Join(", ", session.Request.Targets), _sizes, _shell, finder, Platform.FileManagerName, _timeProvider.GetLocalNow());
+            _dialogs.ShowDuplicates(results);
+            if (Settings.Get(SettingsCatalog.Duplicates.VerifyAutomatically) && results.VerifyAllCommand.CanExecute(null))
+            {
+                await results.VerifyAllCommand.ExecuteAsync(null);
+            }
         }
 
         async Task<string> SearchAsync(CancellationToken cancellationToken)
@@ -65,7 +68,7 @@ public sealed partial class MainWindowViewModel
             {
                 if (searching)
                 {
-                    StatusText = DescribeProgress(report);
+                    StatusText = DescribeProgress(report, finder.Options);
                 }
             });
             try
@@ -85,12 +88,13 @@ public sealed partial class MainWindowViewModel
     /// Describes a duplicate search's progress for the status bar.
     /// </summary>
     /// <param name="report">The progress.</param>
+    /// <param name="options">How files are compared.</param>
     /// <returns>The status text.</returns>
-    private string DescribeProgress(DuplicateProgress report) => report.Stage switch
+    private string DescribeProgress(DuplicateProgress report, DuplicateFinderOptions options) => report.Stage switch
     {
         DuplicateSearchStage.Grouping => $"Finding duplicates: grouping {DisplayFormat.Quantity(report.FilesTotal, "file", "files")} by size…",
-        DuplicateSearchStage.Sampling => $"Finding duplicates: comparing samples of {DisplayFormat.Count(report.FilesDone)} of {DisplayFormat.Quantity(report.FilesTotal, "file", "files")} over 1 MiB…",
-        _ => $"Finding duplicates: hashing {DisplayFormat.Count(report.FilesDone)} of {DisplayFormat.Quantity(report.FilesTotal, "file", "files")} up to 1 MiB ({_sizes.Format(report.BytesDone)} of {_sizes.Format(report.BytesTotal)})…",
+        DuplicateSearchStage.Sampling => $"Finding duplicates: comparing samples of {DisplayFormat.Count(report.FilesDone)} of {DisplayFormat.Quantity(report.FilesTotal, "file", "files")} over {options.HashLimitText}…",
+        _ => $"Finding duplicates: hashing {DisplayFormat.Count(report.FilesDone)} of {DisplayFormat.Quantity(report.FilesTotal, "file", "files")} up to {options.HashLimitText} ({_sizes.Format(report.BytesDone)} of {_sizes.Format(report.BytesTotal)})…",
     };
 
     /// <summary>

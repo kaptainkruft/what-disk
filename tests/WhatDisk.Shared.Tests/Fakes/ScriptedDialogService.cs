@@ -33,6 +33,11 @@ internal sealed class ScriptedDialogService : IDialogService
     /// </summary>
     public List<DuplicateResultsViewModel> DuplicateResults { get; } = [];
 
+    /// <summary>
+    /// Gets the settings windows shown.
+    /// </summary>
+    public List<SettingsViewModel> SettingsShown { get; } = [];
+
     /// <inheritdoc/>
     public Task<bool> ConfirmAsync(ConfirmationRequest request)
     {
@@ -49,4 +54,7 @@ internal sealed class ScriptedDialogService : IDialogService
 
     /// <inheritdoc/>
     public void ShowDuplicates(DuplicateResultsViewModel results) => DuplicateResults.Add(results);
+
+    /// <inheritdoc/>
+    public void ShowSettings(SettingsViewModel settings) => SettingsShown.Add(settings);
 }

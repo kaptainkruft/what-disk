@@ -3,10 +3,13 @@
              x:Class="WhatDisk.App"
              Name="WhatDisk"
              RequestedThemeVariant="Default">
-  <!-- The macOS application menu; Avalonia adds the standard Hide, Show All and Quit items. -->
+  <!-- The macOS application menu; Avalonia adds the standard Hide, Show All and Quit items. Elsewhere Settings is in
+       the Tools menu. -->
   <NativeMenu.Menu>
     <NativeMenu>
       <NativeMenuItem Header="About WhatDisk" Click="OnAboutClicked" />
+      <NativeMenuItemSeparator />
+      <NativeMenuItem Header="Settings…" Gesture="Cmd+OemComma" Click="OnSettingsClicked" />
     </NativeMenu>
   </NativeMenu.Menu>
   <Application.Styles>

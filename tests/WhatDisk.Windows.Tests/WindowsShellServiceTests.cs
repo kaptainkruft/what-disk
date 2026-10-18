@@ -106,4 +106,21 @@ public sealed class WindowsShellServiceTests : IDisposable
     /// Deletes the temporary directory.
     /// </summary>
     public void Dispose() => _tree.Dispose();
+
+    /// <summary>
+    /// Moving to the Recycle Bin asks Windows to warn before deleting an item permanently, unless the settings turn
+    /// the warning off; the shell's own confirmation and error windows stay off either way.
+    /// </summary>
+    [Fact]
+    public void RecycleFlags_FollowTheSettings()
+    {
+        var warning = WindowsShellService.RecycleFlags(warnWhenNotRecyclable: true);
+        var silent = WindowsShellService.RecycleFlags(warnWhenNotRecyclable: false);
+
+        Assert.NotEqual(0, warning & Shell32.FileOperationWantNukeWarning);
+        Assert.Equal(0, silent & Shell32.FileOperationWantNukeWarning);
+        Assert.All([warning, silent], static flags => Assert.Equal(
+            Shell32.FileOperationAllowUndo | Shell32.FileOperationNoConfirmation | Shell32.FileOperationNoErrorUI | Shell32.FileOperationSilent,
+            flags & (Shell32.FileOperationAllowUndo | Shell32.FileOperationNoConfirmation | Shell32.FileOperationNoErrorUI | Shell32.FileOperationSilent)));
+    }
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using WhatDisk.Icons;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 using WhatDisk.ViewModels;
 using WhatDisk.Views;
 using WhatDisk.Volumes;
@@ -25,6 +26,7 @@ public static class WhatDiskServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(PlatformCapabilities.Generic);
+        services.TryAddSingleton(static provider => new AppSettings(provider.GetRequiredService<PlatformCapabilities>(), AppSettings.DefaultFilePath()));
         services.TryAddSingleton<IFileSystemEnumerator, ManagedFileSystemEnumerator>();
         services.TryAddSingleton<IVolumeService>(static _ => new PortableVolumeService());
         services.TryAddSingleton<IIconProvider, DefaultIconProvider>();

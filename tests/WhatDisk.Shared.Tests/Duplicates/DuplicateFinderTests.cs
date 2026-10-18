@@ -51,10 +51,10 @@ public sealed class DuplicateFinderTests : IDisposable
     [InlineData(5_000_000_000_000L)]
     public void SampleOffsets_SpreadFromStartToEnd(long length)
     {
-        var offsets = DuplicateFinder.SampleOffsets(length);
+        var offsets = DuplicateFinder.SampleOffsets(length, 64, 4096);
 
-        var last = Math.Max(0, length - DuplicateFinder.SampleLength);
-        Assert.Equal(DuplicateFinder.SampleCount, offsets.Length);
+        var last = Math.Max(0, length - 4096);
+        Assert.Equal(64, offsets.Length);
         Assert.Equal(0, offsets[0]);
         Assert.Equal(last, offsets[^1]);
         Assert.Equal(last / 3, offsets[21]);
@@ -138,8 +138,8 @@ public sealed class DuplicateFinderTests : IDisposable
     [Fact]
     public async Task OneMebibyte_IsTheLimitForHashing()
     {
-        var limit = Content(5, (int)DuplicateFinder.FullHashLimit);
-        var over = Content(6, (int)DuplicateFinder.FullHashLimit + 1);
+        var limit = Content(5, 1024 * 1024);
+        var over = Content(6, (1024 * 1024) + 1);
         Write("limit-a", limit);
         Write("limit-b", limit);
         Write("over-a", over);
@@ -148,7 +148,7 @@ public sealed class DuplicateFinderTests : IDisposable
         var result = await FindAsync();
 
         Assert.Equal(
-            [(DuplicateFinder.FullHashLimit + 1, DuplicateComparison.Samples), (DuplicateFinder.FullHashLimit, DuplicateComparison.Hash)],
+            [((1024L * 1024) + 1, DuplicateComparison.Samples), (1024L * 1024, DuplicateComparison.Hash)],
             result.Sets.Select(static set => (set.Length, set.Comparison)));
     }
 

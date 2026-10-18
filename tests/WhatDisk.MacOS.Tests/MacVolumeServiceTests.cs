@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using WhatDisk.Settings;
 using WhatDisk.Volumes;
 
 namespace WhatDisk.MacOS.Tests;
@@ -54,5 +55,27 @@ public sealed class MacVolumeServiceTests
         Assert.Equal("/", volumes[0].MountPoint);
         Assert.DoesNotContain(volumes, static volume => volume.Kind == VolumeKind.Virtual);
         Assert.DoesNotContain(volumes, static volume => volume.MountPoint.StartsWith("/System/Volumes/", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The volume list leaves out the volumes the Finder hides, unless the settings ask for them; virtual file systems
+    /// are left out either way, and the startup disk is always listed.
+    /// </summary>
+    [Fact]
+    public void HiddenVolumes_AreListedOnlyWhenTheSettingsSay()
+    {
+        var hidden = new VolumeInfo { Id = "dev:01000004:hidden", MountPoint = "/System/Volumes/Preboot", Name = "Preboot", Kind = VolumeKind.Fixed };
+        var device = new VolumeInfo { Id = "mnt:/dev", MountPoint = "/dev", Name = "devfs", Kind = VolumeKind.Virtual };
+        var startup = new VolumeInfo { Id = "dev:01000001:hidden", MountPoint = "/", Name = "Macintosh HD", Kind = VolumeKind.Fixed };
+
+        Assert.False(MacVolumeService.IsSelectable(hidden, showHidden: false));
+        Assert.True(MacVolumeService.IsSelectable(hidden, showHidden: true));
+        Assert.False(MacVolumeService.IsSelectable(device, showHidden: true));
+        Assert.True(MacVolumeService.IsSelectable(startup, showHidden: false));
+
+        var settings = new AppSettings(MacPlatformServiceCollectionExtensions.Capabilities, null);
+        settings.Set(SettingsCatalog.Scanning.ShowHiddenVolumes, true);
+        var all = new MacVolumeService(settings).GetSelectableVolumes();
+        Assert.True(all.Count >= _service.GetSelectableVolumes().Count);
     }
 }

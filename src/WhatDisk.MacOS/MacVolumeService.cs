@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using WhatDisk.MacOS.Interop;
+using WhatDisk.Settings;
 using WhatDisk.Volumes;
 
 namespace WhatDisk.MacOS;
@@ -10,8 +11,9 @@ namespace WhatDisk.MacOS;
 /// <c>getattrlist</c> for its physical device number, its volume name and its mount flags, which tell system volumes
 /// (hidden by the Finder), snapshots and network shares apart.
 /// </summary>
+/// <param name="settings">The settings, which can list the volumes the Finder hides; <see langword="null"/> for the defaults.</param>
 [SupportedOSPlatform("macos")]
-internal sealed unsafe class MacVolumeService : IVolumeService
+internal sealed unsafe class MacVolumeService(AppSettings? settings = null) : IVolumeService
 {
     /// <summary>The mount point of the data volume of the startup disk.</summary>
     private const string DataVolumeMountPoint = "/System/Volumes/Data";
@@ -24,7 +26,7 @@ internal sealed unsafe class MacVolumeService : IVolumeService
         [
             .. table.Entries
                 .Select(static entry => entry.Volume)
-                .Where(IsSelectable)
+                .Where(volume => IsSelectable(volume, settings?.Get(SettingsCatalog.Scanning.ShowHiddenVolumes) ?? false))
                 .OrderBy(static volume => volume.MountPoint == "/" ? 0 : 1)
                 .ThenBy(static volume => volume.Name, StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -55,11 +57,14 @@ internal sealed unsafe class MacVolumeService : IVolumeService
     public VolumeInfo? QueryVolume(string path) => null;
 
     /// <summary>
-    /// Determines whether a volume belongs in the volume picker: the startup disk and anything the Finder would show.
+    /// Determines whether a volume belongs in the volume picker: the startup disk and anything the Finder would show,
+    /// plus the volumes the Finder hides (such as Preboot and VM) when the settings ask for them. Virtual file systems
+    /// and snapshots are never listed.
     /// </summary>
     /// <param name="volume">The volume.</param>
-    /// <returns><see langword="true"/> for user-facing volumes.</returns>
-    private static bool IsSelectable(VolumeInfo volume)
+    /// <param name="showHidden">Whether to list the volumes the Finder hides.</param>
+    /// <returns><see langword="true"/> for volumes to list.</returns>
+    internal static bool IsSelectable(VolumeInfo volume, bool showHidden)
     {
         if (volume.MountPoint == "/")
         {
@@ -67,7 +72,7 @@ internal sealed unsafe class MacVolumeService : IVolumeService
         }
 
         return volume.Kind is not (VolumeKind.Virtual or VolumeKind.Unknown)
-            && !volume.Id.EndsWith(":hidden", StringComparison.Ordinal);
+            && (showHidden || !volume.Id.EndsWith(":hidden", StringComparison.Ordinal));
     }
 
     /// <summary>

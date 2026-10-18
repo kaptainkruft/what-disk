@@ -1,6 +1,6 @@
 ## Testing
 
-`dotnet test` runs 405 tests across three projects (on macOS, 34 Windows-only tests skip; on Windows, the macOS-only ones do).
+`dotnet test` runs 438 tests across three projects (on macOS, 35 Windows-only tests skip; on Windows, the macOS-only ones do).
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
@@ -16,6 +16,13 @@
   empty, cloud-only, unreadable, changed and missing files, hard links (with real links on macOS and Windows),
   progress and cancellation. Other tests cover the CSV quoting and the Duplicates window, including a real
   right-click on a row to verify its set, and that Copy and Export give the same CSV.
+- **Settings:** the settings file is checked for writing only differences from the defaults, putting platform
+  settings in their subsection, and keeping other platforms' settings and unknown keys. Other tests cover comments,
+  invalid values and invalid files, platform-dependent defaults, Reset, Restore Defaults and reloading after hand
+  edits. The catalogue is checked for unique camel-case paths and valid defaults on both platforms. The window's
+  pages, asterisks, editors and Reset are tested, along with each consumer: scan options, the delete threshold, size
+  units applied at once, the duplicate options with automatic verification, the macOS volume list and the Windows
+  Recycle Bin flags.
 - **Headless UI:** the main window is rendered with Skia in light and dark themes after a real scan. The pane
   proportions, header sorting, selection and the icon pipeline are checked. Real key presses, clicks and drag events
   check the arrow keys, shortcuts, focus tracking, the context menu, range selection and drag and drop.

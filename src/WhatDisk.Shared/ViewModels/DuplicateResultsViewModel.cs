@@ -78,7 +78,7 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
         Title = $"Duplicates in {scope}";
         Rows = [.. _sets.SelectMany(CreateRows)];
         SuggestedFileName = $"WhatDisk Duplicates {foundAt.ToString("yyyy-MM-dd HHmm", CultureInfo.InvariantCulture)}.csv";
-        Details = DescribeSearch(result);
+        Details = DescribeSearch(result, finder.Options);
         UpdateShading();
         UpdateSummary();
         if (HasRows && CanReveal)
@@ -234,11 +234,12 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
     /// Describes how many files each stage compared, and what was left out.
     /// </summary>
     /// <param name="result">The result.</param>
+    /// <param name="options">How the files were compared.</param>
     /// <returns>The description.</returns>
-    private static string DescribeSearch(DuplicateSearchResult result)
+    private static string DescribeSearch(DuplicateSearchResult result, DuplicateFinderOptions options)
     {
         var text = $"Of {DisplayFormat.Quantity(result.FilesConsidered, "file", "files")}, {DisplayFormat.Count(result.SizeMatches)} shared a size with another: "
-            + $"{DisplayFormat.Count(result.HashedFiles)} up to 1 MiB were hashed, and {DisplayFormat.Count(result.SampledFiles)} larger ones were compared by samples.";
+            + $"{DisplayFormat.Count(result.HashedFiles)} up to {options.HashLimitText} were hashed, and {DisplayFormat.Count(result.SampledFiles)} larger ones were compared by {options.SamplesText}.";
         var leftOut = new List<string>();
         if (result.EmptyFiles > 0)
         {
@@ -505,7 +506,10 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
     /// <param name="set">The set.</param>
     /// <returns>One row per file.</returns>
     private IEnumerable<DuplicateRowViewModel> CreateRows(DuplicateSet set) =>
-        set.Paths.Select(path => new DuplicateRowViewModel(set.Id, path, set.Length, _sizes.Format(set.Length), _sizes.FormatExact(set.Length), set.Hash, set.Comparison));
+        set.Paths.Select(path => new DuplicateRowViewModel(set.Id, path, set.Length, _sizes.Format(set.Length), _sizes.FormatExact(set.Length), set.Hash, set.Comparison)
+        {
+            SamplesText = _finder.Options.SamplesText,
+        });
 
     /// <summary>
     /// Shades every other set, so neighbouring sets can be told apart.
@@ -534,8 +538,8 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
             ? null
             : sampled == 0
                 ? "Every set is confirmed by hash."
-                : $"{DisplayFormat.Quantity(_sets.Count - sampled, "set", "sets")} confirmed by hash; {DisplayFormat.Quantity(sampled, "set", "sets")} of files over 1 MiB "
-                  + $"only matched on {DuplicateFinder.SampleCount} samples of {DuplicateFinder.SampleLength / 1024} KiB. Verify by hash before deleting anything.";
+                : $"{DisplayFormat.Quantity(_sets.Count - sampled, "set", "sets")} confirmed by hash; {DisplayFormat.Quantity(sampled, "set", "sets")} of files over "
+                  + $"{_finder.Options.HashLimitText} only matched on {_finder.Options.SamplesText}. Verify by hash before deleting anything.";
         if (_failures.Count > 0)
         {
             FailureSummary = $"{DisplayFormat.Quantity(_failures.Count, "file", "files")} could not be read and {(_failures.Count == 1 ? "was" : "were")} left out.";
@@ -641,10 +645,15 @@ public sealed partial class DuplicateRowViewModel : ObservableObject
     public string ComparisonText => DuplicateCsv.ComparisonName(Comparison);
 
     /// <summary>
+    /// Gets how the file was sampled, such as "64 samples of 4 KiB", for <see cref="ComparisonTip"/>.
+    /// </summary>
+    public string SamplesText { get; init; } = DuplicateFinderOptions.Default.SamplesText;
+
+    /// <summary>
     /// Gets what the comparison means.
     /// </summary>
     public string ComparisonTip => IsSampled
-        ? $"Matched on {DuplicateFinder.SampleCount} samples of {DuplicateFinder.SampleLength / 1024} KiB spread through the file; the rest was not compared. Verify the set by hash to be sure."
+        ? $"Matched on {SamplesText} spread through the file; the rest was not compared. Verify the set by hash to be sure."
         : "The whole file was hashed (XXH128) and matches the others in its set.";
 
     /// <summary>

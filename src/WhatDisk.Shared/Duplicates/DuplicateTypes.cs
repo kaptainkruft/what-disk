@@ -16,8 +16,9 @@ public enum DuplicateComparison
     Hash,
 
     /// <summary>
-    /// Samples of each file (<see cref="DuplicateFinder.SampleCount"/> of <see cref="DuplicateFinder.SampleLength"/>
-    /// bytes, spread from start to end) are equal; the rest was not compared.
+    /// Samples of each file (<see cref="DuplicateFinderOptions.SampleCount"/> of
+    /// <see cref="DuplicateFinderOptions.SampleLength"/> bytes, spread from start to end) are equal; the rest was not
+    /// compared.
     /// </summary>
     Samples,
 }
@@ -71,14 +72,14 @@ public enum DuplicateSearchStage
     Grouping,
 
     /// <summary>
-    /// Comparing samples of each file larger than <see cref="DuplicateFinder.FullHashLimit"/> that shares its length
-    /// with another.
+    /// Comparing samples of each file larger than <see cref="DuplicateFinderOptions.FullHashLimit"/> that shares its
+    /// length with another.
     /// </summary>
     Sampling,
 
     /// <summary>
-    /// Hashing the whole of each file up to <see cref="DuplicateFinder.FullHashLimit"/> that shares its length with
-    /// another.
+    /// Hashing the whole of each file up to <see cref="DuplicateFinderOptions.FullHashLimit"/> that shares its length
+    /// with another.
     /// </summary>
     Hashing,
 }
@@ -99,7 +100,7 @@ public sealed record DuplicateProgress(DuplicateSearchStage Stage, int FilesDone
 /// <param name="Sets">The sets of duplicates, largest waste first.</param>
 /// <param name="FilesConsidered">The non-empty files that were grouped by length.</param>
 /// <param name="SizeMatches">The files that share their length with another file.</param>
-/// <param name="HashedFiles">The files up to <see cref="DuplicateFinder.FullHashLimit"/> that were hashed.</param>
+/// <param name="HashedFiles">The files up to <see cref="DuplicateFinderOptions.FullHashLimit"/> that were hashed.</param>
 /// <param name="SampledFiles">The larger files that were compared by samples.</param>
 /// <param name="EmptyFiles">The empty files, which were left out.</param>
 /// <param name="OfflineFiles">The files stored only in the cloud, which were left out so as not to download them.</param>

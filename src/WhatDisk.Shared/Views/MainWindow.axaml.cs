@@ -16,6 +16,9 @@ public partial class MainWindow : Window
     /// <summary>The view model the window is subscribed to.</summary>
     private MainWindowViewModel? _viewModel;
 
+    /// <summary>The window-wide Settings shortcut, where the menu bar is drawn in the window.</summary>
+    private KeyBinding? _settingsBinding;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
     /// </summary>
@@ -43,6 +46,21 @@ public partial class MainWindow : Window
         }
 
         NativeMenu.SetMenu(this, _viewModel is null ? null : BuildMenuBar(_viewModel));
+
+        // A menu bar drawn in the window does not handle its shortcuts, so Settings gets a window-wide one; on macOS the
+        // application menu handles ⌘,.
+        if (_settingsBinding is not null)
+        {
+            KeyBindings.Remove(_settingsBinding);
+        }
+
+        _settingsBinding = _viewModel is { Platform.HasApplicationMenu: false } model
+            ? new KeyBinding { Gesture = model.Platform.Shortcuts.Settings, Command = model.OpenSettingsCommand }
+            : null;
+        if (_settingsBinding is not null)
+        {
+            KeyBindings.Add(_settingsBinding);
+        }
     }
 
     /// <inheritdoc/>
@@ -124,6 +142,12 @@ public partial class MainWindow : Window
 
         var tools = new NativeMenu();
         Add(tools, "Find Duplicates", viewModel.FindDuplicatesCommand, null);
+        if (!platform.HasApplicationMenu)
+        {
+            // macOS has Settings in the application menu instead.
+            tools.Items.Add(new NativeMenuItemSeparator());
+            Add(tools, "Settings\u2026", viewModel.OpenSettingsCommand, keys.Settings);
+        }
 
         // Where the menu bar is drawn in the window (Windows), the titles get access keys (Alt+F and so on) and About
         // goes in a Help menu; macOS has About in the application menu instead.

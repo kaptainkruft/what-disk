@@ -13,9 +13,10 @@ public sealed class ByteSizeFormatter(ByteUnitConvention convention, CultureInfo
     private static readonly string[] Units = ["KB", "MB", "GB", "TB", "PB", "EB"];
 
     /// <summary>
-    /// Gets the convention used to scale values.
+    /// Gets or sets the convention used to scale values. Changing it changes how every later value is formatted; texts
+    /// already formatted are not updated.
     /// </summary>
-    public ByteUnitConvention Convention { get; } = convention;
+    public ByteUnitConvention Convention { get; set; } = convention;
 
     /// <summary>
     /// Gets the culture used for number formatting.

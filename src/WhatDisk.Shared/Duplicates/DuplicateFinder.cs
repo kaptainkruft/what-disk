@@ -11,11 +11,13 @@ namespace WhatDisk.Duplicates;
 /// Finds files with the same contents, reading as little as it can:
 /// <list type="number">
 /// <item>files are grouped by length, from the scan alone, without touching the disk;</item>
-/// <item>files up to <see cref="FullHashLimit"/> (1 MiB), which are quick to read, are hashed whole with XXH128, and
-/// files with the same length and hash form a set confirmed by <see cref="DuplicateComparison.Hash"/>;</item>
-/// <item>larger files are compared by <see cref="SampleCount"/> samples of <see cref="SampleLength"/> bytes, spread
-/// evenly from the start to the end, and files whose samples are all equal form a set matched by
-/// <see cref="DuplicateComparison.Samples"/>. Such a set can be confirmed later with <see cref="VerifyAsync"/>.</item>
+/// <item>files up to <see cref="DuplicateFinderOptions.FullHashLimit"/> (1 MiB by default), which are quick to read,
+/// are hashed whole with XXH128, and files with the same length and hash form a set confirmed by
+/// <see cref="DuplicateComparison.Hash"/>;</item>
+/// <item>larger files are compared by <see cref="DuplicateFinderOptions.SampleCount"/> samples of
+/// <see cref="DuplicateFinderOptions.SampleLength"/> bytes (64 of 4 KiB by default), spread evenly from the start to
+/// the end, and files whose samples are all equal form a set matched by <see cref="DuplicateComparison.Samples"/>.
+/// Such a set can be confirmed later with <see cref="VerifyAsync"/>.</item>
 /// </list>
 /// Empty files, files stored only in the cloud (reading them would download them) and extra hard links to a file
 /// already compared are left out. Files that cannot be read, or whose length changed since the scan, are reported as
@@ -23,21 +25,6 @@ namespace WhatDisk.Duplicates;
 /// </summary>
 public sealed class DuplicateFinder
 {
-    /// <summary>
-    /// The largest file, in bytes, that is hashed whole during the search rather than sampled: 1 MiB.
-    /// </summary>
-    public const long FullHashLimit = 1024 * 1024;
-
-    /// <summary>
-    /// The number of samples taken from each file larger than <see cref="FullHashLimit"/>.
-    /// </summary>
-    public const int SampleCount = 64;
-
-    /// <summary>
-    /// The length of each sample, in bytes: 4 KiB.
-    /// </summary>
-    public const int SampleLength = 4096;
-
     /// <summary>The size of the buffer each worker hashes through.</summary>
     private const int HashBufferLength = 1024 * 1024;
 
@@ -57,16 +44,18 @@ public sealed class DuplicateFinder
     /// Gets a file's identity (device and file number), or <see langword="null"/> when the platform cannot tell; files
     /// with the same identity are hard links to the same data and only the first is compared.
     /// </param>
-    /// <param name="parallelism">
-    /// The number of files read at once, or zero for the default: up to four, which keeps a solid-state disk busy
-    /// without making a spinning disk seek between too many files.
-    /// </param>
-    public DuplicateFinder(Func<string, FileIdentity>? identify = null, int parallelism = 0)
+    /// <param name="options">How files are compared, or <see langword="null"/> for <see cref="DuplicateFinderOptions.Default"/>.</param>
+    public DuplicateFinder(Func<string, FileIdentity>? identify = null, DuplicateFinderOptions? options = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(parallelism);
         _identify = identify ?? (static _ => FileIdentity.Unknown);
-        _parallelism = parallelism > 0 ? parallelism : Math.Clamp(Environment.ProcessorCount, 1, 4);
+        Options = options ?? DuplicateFinderOptions.Default;
+        _parallelism = Options.Parallelism > 0 ? Options.Parallelism : Math.Clamp(Environment.ProcessorCount, 1, 4);
     }
+
+    /// <summary>
+    /// Gets how files are compared.
+    /// </summary>
+    public DuplicateFinderOptions Options { get; }
 
     /// <summary>
     /// Gets the interval between progress reports.
@@ -176,19 +165,20 @@ public sealed class DuplicateFinder
     }
 
     /// <summary>
-    /// Gets where the samples of a file are taken: <see cref="SampleCount"/> offsets spread evenly from the start of
-    /// the file to the last whole sample at its end. Samples of a file no longer than <see cref="SampleLength"/> are
-    /// the whole file.
+    /// Gets where the samples of a file are taken: <paramref name="count"/> offsets spread evenly from the start of
+    /// the file to the last whole sample at its end. Samples of a file no longer than a sample are the whole file.
     /// </summary>
     /// <param name="length">The file's length.</param>
+    /// <param name="count">The number of samples, at least 2.</param>
+    /// <param name="sampleLength">The length of each sample.</param>
     /// <returns>The offset of each sample.</returns>
-    internal static long[] SampleOffsets(long length)
+    internal static long[] SampleOffsets(long length, int count, int sampleLength)
     {
-        var last = Math.Max(0, length - SampleLength);
-        var offsets = new long[SampleCount];
-        for (var index = 0; index < SampleCount; index++)
+        var last = Math.Max(0, length - sampleLength);
+        var offsets = new long[count];
+        for (var index = 0; index < count; index++)
         {
-            offsets[index] = (long)((Int128)last * index / (SampleCount - 1));
+            offsets[index] = (long)((Int128)last * index / (count - 1));
         }
 
         return offsets;
@@ -200,11 +190,11 @@ public sealed class DuplicateFinder
     /// <param name="handle">The open file.</param>
     /// <param name="length">The file's length.</param>
     /// <returns>The samples, or <see langword="null"/> when the file ended early.</returns>
-    internal static byte[]? ReadSamples(SafeFileHandle handle, long length)
+    internal byte[]? ReadSamples(SafeFileHandle handle, long length)
     {
-        var size = (int)Math.Min(SampleLength, length);
-        var samples = new byte[SampleCount * size];
-        var offsets = SampleOffsets(length);
+        var size = (int)Math.Min(Options.SampleLength, length);
+        var offsets = SampleOffsets(length, Options.SampleCount, Options.SampleLength);
+        var samples = new byte[offsets.Length * size];
         for (var index = 0; index < offsets.Length; index++)
         {
             if (!ReadExactly(handle, samples.AsSpan(index * size, size), offsets[index]))
@@ -417,8 +407,8 @@ public sealed class DuplicateFinder
     private async Task<DuplicateSearchResult> CompareAsync(List<List<DuplicateCandidate>> groups, SearchState state, CancellationToken cancellationToken)
     {
         var options = new ParallelOptions { MaxDegreeOfParallelism = _parallelism, CancellationToken = cancellationToken };
-        var large = groups.Where(static group => group[0].Length > FullHashLimit).ToList();
-        var small = groups.Where(static group => group[0].Length <= FullHashLimit).ToList();
+        var large = groups.Where(group => group[0].Length > Options.FullHashLimit).ToList();
+        var small = groups.Where(group => group[0].Length <= Options.FullHashLimit).ToList();
         var matches = new ConcurrentBag<(Member[] Files, DuplicateComparison Comparison)>();
 
         state.Begin(DuplicateSearchStage.Sampling, large.Sum(static group => group.Count));
@@ -710,4 +700,93 @@ public sealed class DuplicateFinder
             progress.Report(new DuplicateProgress(_stage, Volatile.Read(ref _done), Total, Interlocked.Read(ref _bytesDone), _bytesTotal));
         }
     }
+}
+
+/// <summary>
+/// How a <see cref="DuplicateFinder"/> compares files.
+/// </summary>
+public sealed record DuplicateFinderOptions
+{
+    /// <summary>
+    /// Gets the default options: hash files up to 1 MiB, sample larger ones 64 times for 4 KiB, and read up to four
+    /// files at once.
+    /// </summary>
+    public static DuplicateFinderOptions Default { get; } = new();
+
+    /// <summary>
+    /// Gets the largest file, in bytes, hashed whole during the search rather than sampled; 1 MiB by default.
+    /// </summary>
+    public long FullHashLimit
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            field = value;
+        }
+    } = 1024 * 1024;
+
+    /// <summary>
+    /// Gets the number of samples taken from each larger file, at least 2; 64 by default.
+    /// </summary>
+    public int SampleCount
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 2);
+            field = value;
+        }
+    } = 64;
+
+    /// <summary>
+    /// Gets the length of each sample, in bytes; 4 KiB by default.
+    /// </summary>
+    public int SampleLength
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            field = value;
+        }
+    } = 4096;
+
+    /// <summary>
+    /// Gets the hashing limit for display, such as "1 MiB".
+    /// </summary>
+    public string HashLimitText => DescribeBinarySize(FullHashLimit);
+
+    /// <summary>
+    /// Gets the sampling for display, such as "64 samples of 4 KiB".
+    /// </summary>
+    public string SamplesText => $"{SampleCount.ToString(CultureInfo.CurrentCulture)} samples of {DescribeBinarySize(SampleLength)}";
+
+    /// <summary>
+    /// Gets the number of files read at once, or zero to choose automatically: up to four, which keeps a solid-state
+    /// disk busy without making a spinning disk seek between too many files.
+    /// </summary>
+    public int Parallelism
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            field = value;
+        }
+    }
+
+    /// <summary>
+    /// Describes a size in whole binary units where it divides evenly, such as "4 KiB" or "1 MiB", and in bytes
+    /// otherwise.
+    /// </summary>
+    /// <param name="bytes">The size.</param>
+    /// <returns>The description.</returns>
+    private static string DescribeBinarySize(long bytes) => bytes switch
+    {
+        0 => "0 bytes",
+        _ when bytes % (1024 * 1024) == 0 => string.Create(CultureInfo.CurrentCulture, $"{bytes / (1024 * 1024):N0} MiB"),
+        _ when bytes % 1024 == 0 => string.Create(CultureInfo.CurrentCulture, $"{bytes / 1024:N0} KiB"),
+        _ => string.Create(CultureInfo.CurrentCulture, $"{bytes:N0} bytes"),
+    };
 }

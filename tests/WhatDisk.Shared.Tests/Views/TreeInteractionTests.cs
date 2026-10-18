@@ -245,7 +245,7 @@ public sealed class TreeInteractionTests : IDisposable
     /// <summary>
     /// The menu bar has File, Edit and View menus in the platform's words with its shortcuts, and a Tools menu with
     /// Find Duplicates, enabled after the scan. Without an application menu (Windows) it is drawn in the window, its
-    /// titles have access keys, and Help holds About and File holds Exit.
+    /// titles have access keys, Help holds About, File holds Exit, and Tools holds Settings (Ctrl+,).
     /// </summary>
     /// <param name="platformName">The conventions to follow.</param>
     /// <returns>A task that completes when the test has finished.</returns>
@@ -265,10 +265,19 @@ public sealed class TreeInteractionTests : IDisposable
             .ToDictionary(static item => item.Header!, StringComparer.Ordinal);
 
         Assert.Equal(platform.HasApplicationMenu ? ["File", "Edit", "View", "Tools"] : ["_File", "_Edit", "_View", "_Tools", "_Help"], titles);
-        var findDuplicates = Assert.Single(bar.Items.OfType<NativeMenuItem>().Single(static item => item.Header!.EndsWith("Tools", StringComparison.Ordinal)).Menu!.Items.OfType<NativeMenuItem>());
-        Assert.Equal("Find Duplicates", findDuplicates.Header);
-        Assert.Same(viewModel.FindDuplicatesCommand, findDuplicates.Command);
+        var tools = bar.Items.OfType<NativeMenuItem>().Single(static item => item.Header!.EndsWith("Tools", StringComparison.Ordinal)).Menu!.Items
+            .Where(static item => item is not NativeMenuItemSeparator)
+            .OfType<NativeMenuItem>()
+            .ToList();
+        Assert.Equal(platform.HasApplicationMenu ? ["Find Duplicates"] : ["Find Duplicates", "Settings\u2026"], tools.Select(static item => item.Header));
+        Assert.Same(viewModel.FindDuplicatesCommand, tools[0].Command);
         Assert.True(viewModel.FindDuplicatesCommand.CanExecute(null));
+        if (!platform.HasApplicationMenu)
+        {
+            // macOS has Settings in the application menu instead.
+            Assert.Same(viewModel.OpenSettingsCommand, tools[1].Command);
+            Assert.Equal(platform.Shortcuts.Settings, tools[1].Gesture);
+        }
         Assert.Equal(platform.Shortcuts.Reveal, file[$"Show in {platform.FileManagerName}"].Gesture);
         Assert.Equal(platform.Shortcuts.GetInfo, file[platform.InfoCommandName].Gesture);
         Assert.Equal(platform.Shortcuts.MoveToTrash, file[$"Move to {platform.TrashName}"].Gesture);

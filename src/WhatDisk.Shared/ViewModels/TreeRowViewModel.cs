@@ -193,6 +193,11 @@ public sealed partial class TreeRowViewModel : ObservableObject
     internal IComparer<TreeRowViewModel>? ChildrenSortedWith { get; set; }
 
     /// <summary>
+    /// Forgets the formatted size, so that the next <see cref="RefreshValues"/> formats it again.
+    /// </summary>
+    internal void InvalidateTexts() => SizeText = string.Empty;
+
+    /// <summary>
     /// Captures the node's current values and updates the displayed texts that changed.
     /// </summary>
     /// <param name="parentSize">The size used as 100% for <see cref="PercentOfParent"/>.</param>

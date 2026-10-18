@@ -5,11 +5,15 @@ using WhatDisk.ViewModels;
 namespace WhatDisk.Views;
 
 /// <summary>
-/// Asks questions with modal windows over the main window, and shows results in windows the main window owns.
+/// Asks questions with modal windows over the main window, and shows results and the settings (one window at most) in
+/// windows the main window owns.
 /// </summary>
 /// <param name="owner">Gets the window that owns the questions.</param>
 public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
 {
+    /// <summary>The settings window, while it is open.</summary>
+    private SettingsWindow? _settingsWindow;
+
     /// <inheritdoc/>
     public async Task<bool> ConfirmAsync(ConfirmationRequest request)
     {
@@ -61,6 +65,34 @@ public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
     {
         ArgumentNullException.ThrowIfNull(results);
         var window = new DuplicatesWindow { DataContext = results };
+        if (owner() is { IsVisible: true } main)
+        {
+            window.Show(main);
+        }
+        else
+        {
+            window.Show();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void ShowSettings(SettingsViewModel settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (_settingsWindow is { } open)
+        {
+            settings.Dispose();
+            open.Activate();
+            return;
+        }
+
+        var window = new SettingsWindow { DataContext = settings };
+        window.Closed += (_, _) =>
+        {
+            settings.Dispose();
+            _settingsWindow = null;
+        };
+        _settingsWindow = window;
         if (owner() is { IsVisible: true } main)
         {
             window.Show(main);

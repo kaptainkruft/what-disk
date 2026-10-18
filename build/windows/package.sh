@@ -41,7 +41,9 @@ if [[ -z "$iscc" ]]; then
   iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
 fi
 
-"$iscc" /Qp \
+# Git Bash rewrites arguments that start with "/" as POSIX paths (/Qp would reach ISCC as C:/Program Files/Git/Qp, a
+# second script name), so turn that off for ISCC's switches; the paths in them are already Windows paths.
+MSYS2_ARG_CONV_EXCL='*' "$iscc" /Qp \
   "/DAppVersion=$version" \
   "/DNumericVersion=${version%%-*}" \
   "/DArch=$arch" \

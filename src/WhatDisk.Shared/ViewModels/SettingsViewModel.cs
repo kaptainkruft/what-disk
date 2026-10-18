@@ -8,26 +8,31 @@ using WhatDisk.Settings;
 namespace WhatDisk.ViewModels;
 
 /// <summary>
-/// The settings window: one page per section of the settings file, in the file's order, each listing the section's
+/// The Settings tab: one page per section of the settings file, in the file's order, each listing the section's
 /// settings for this platform. Settings of this platform only sit among the others, marked with an asterisk. Changes
 /// apply and are saved at once.
 /// </summary>
-public sealed partial class SettingsViewModel : ObservableObject, IDisposable
+public sealed partial class SettingsViewModel : TabViewModel, IDisposable
 {
     /// <summary>Opens the settings file in the default editor.</summary>
     private readonly IShellService _shell;
+
+    /// <summary>Asks before restoring the defaults.</summary>
+    private readonly IDialogService _dialogs;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
     /// </summary>
     /// <param name="settings">The settings.</param>
     /// <param name="shell">Opens the settings file.</param>
-    public SettingsViewModel(AppSettings settings, IShellService shell)
+    /// <param name="dialogs">Asks before restoring the defaults; <see langword="null"/> declines, so nothing is reset.</param>
+    public SettingsViewModel(AppSettings settings, IShellService shell, IDialogService? dialogs = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(shell);
         Settings = settings;
         _shell = shell;
+        _dialogs = dialogs ?? new DecliningDialogService();
         Pages =
         [
             .. SettingsCatalog.Sections
@@ -45,6 +50,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// Gets the settings.
     /// </summary>
     public AppSettings Settings { get; }
+
+    /// <inheritdoc/>
+    public override string Header => "Settings";
 
     /// <summary>
     /// Gets the pages, one per section of the settings file.
@@ -76,8 +84,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public partial string? Message { get; private set; }
 
     /// <summary>
-    /// Reads the settings file again, so that changes made to it by hand appear; called when the window is shown or
-    /// brought to the front.
+    /// Reads the settings file again, so that changes made to it by hand appear; called when the tab is shown, and when
+    /// the window becomes active again while it is shown.
     /// </summary>
     public void Reload()
     {
@@ -89,6 +97,29 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// Returns every setting of this platform to its default.
     /// </summary>
     public void ResetAll() => Settings.ResetAll();
+
+    /// <summary>
+    /// Releases the settings' events when the tab is closed.
+    /// </summary>
+    public override void OnClosed() => Dispose();
+
+    /// <summary>
+    /// Asks, then returns every setting of this platform to its default.
+    /// </summary>
+    /// <returns>A task that completes when the question has been answered.</returns>
+    [RelayCommand]
+    private async Task RestoreDefaultsAsync()
+    {
+        var request = new ConfirmationRequest(
+            "Restore every setting to its default?",
+            "Every setting on every page returns to its default. Settings for other platforms in the settings file are kept.",
+            "Restore Defaults",
+            IsDestructive: false);
+        if (await _dialogs.ConfirmAsync(request))
+        {
+            ResetAll();
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose()

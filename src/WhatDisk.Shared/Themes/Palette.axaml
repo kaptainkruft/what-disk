@@ -26,6 +26,8 @@
       <SolidColorBrush x:Key="DangerTextBrush" Color="#c4322b" />
       <SolidColorBrush x:Key="DropTargetBrush" Color="#382a78d6" />
       <SolidColorBrush x:Key="AlternateRowBrush" Color="#0a000000" />
+      <SolidColorBrush x:Key="NeutralTrackBrush" Color="#e3e2dd" />
+      <SolidColorBrush x:Key="ScrimBrush" Color="#59000000" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="ChartSeries0Brush" Color="#3987e5" />
@@ -48,6 +50,8 @@
       <SolidColorBrush x:Key="DangerTextBrush" Color="#ff6b62" />
       <SolidColorBrush x:Key="DropTargetBrush" Color="#4a3987e5" />
       <SolidColorBrush x:Key="AlternateRowBrush" Color="#0dffffff" />
+      <SolidColorBrush x:Key="NeutralTrackBrush" Color="#3a3a37" />
+      <SolidColorBrush x:Key="ScrimBrush" Color="#80000000" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

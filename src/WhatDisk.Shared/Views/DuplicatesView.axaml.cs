@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.Input;
@@ -10,20 +9,20 @@ using WhatDisk.ViewModels;
 namespace WhatDisk.Views;
 
 /// <summary>
-/// Shows the results of a duplicate search: a grid of set number, full path, size, hash and how each file was
+/// Shows the results of a duplicate search in a tab: a grid of set number, full path, size, hash and how each file was
 /// compared, one row per file, with buttons to hash every sampled set, and to copy the results to the clipboard as
 /// CSV or export them to a CSV file. Double-clicking a row shows the file in the file manager; its context menu hashes
-/// the row's set. Closing the window stops any hashing.
+/// the row's set. Closing the tab stops any hashing.
 /// </summary>
-public partial class DuplicatesWindow : Window
+public partial class DuplicatesView : UserControl
 {
     /// <summary>The view model the window is subscribed to.</summary>
     private DuplicateResultsViewModel? _results;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DuplicatesWindow"/> class.
+    /// Initializes a new instance of the <see cref="DuplicatesView"/> class.
     /// </summary>
-    public DuplicatesWindow()
+    public DuplicatesView()
     {
         InitializeComponent();
         ExportCommand = new AsyncRelayCommand(ExportAsync, CanExport);
@@ -54,15 +53,18 @@ public partial class DuplicatesWindow : Window
     }
 
     /// <inheritdoc/>
-    protected override void OnClosed(EventArgs e)
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (_results?.StopVerifyingCommand.CanExecute(null) == true)
-        {
-            _results.StopVerifyingCommand.Execute(null);
-        }
+        base.OnAttachedToVisualTree(e);
 
-        base.OnClosed(e);
+        // Saving needs the window's storage provider, which is known only once the view is in the window.
+        ExportCommand.NotifyCanExecuteChanged();
     }
+
+    /// <summary>
+    /// Gets the window's storage provider, for the save dialog, or <see langword="null"/> outside a window.
+    /// </summary>
+    private IStorageProvider? StorageProvider => TopLevel.GetTopLevel(this)?.StorageProvider;
 
     /// <summary>
     /// Re-evaluates Export when the rows change or hashing starts or stops.
@@ -81,7 +83,7 @@ public partial class DuplicatesWindow : Window
     /// Determines whether there is anything to export, somewhere to save it, and no hashing changing the sets.
     /// </summary>
     /// <returns><see langword="true"/> when Export is enabled.</returns>
-    private bool CanExport() => DataContext is DuplicateResultsViewModel { HasRows: true, IsVerifying: false } && StorageProvider.CanSave;
+    private bool CanExport() => DataContext is DuplicateResultsViewModel { HasRows: true, IsVerifying: false } && StorageProvider is { CanSave: true };
 
     /// <summary>
     /// Asks for a file name with the system's save dialog, starting in Documents (or the Desktop), and saves the CSV.
@@ -89,14 +91,14 @@ public partial class DuplicatesWindow : Window
     /// <returns>A task that completes when the file has been saved or the dialog cancelled.</returns>
     private async Task ExportAsync()
     {
-        if (DataContext is not DuplicateResultsViewModel results)
+        if (DataContext is not DuplicateResultsViewModel results || StorageProvider is not { } storage)
         {
             return;
         }
 
-        var start = await StorageProvider.TryGetWellKnownFolderAsync(WellKnownFolder.Documents)
-            ?? await StorageProvider.TryGetWellKnownFolderAsync(WellKnownFolder.Desktop);
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        var start = await storage.TryGetWellKnownFolderAsync(WellKnownFolder.Documents)
+            ?? await storage.TryGetWellKnownFolderAsync(WellKnownFolder.Desktop);
+        var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Export Duplicates",
             SuggestedFileName = results.SuggestedFileName,
@@ -161,10 +163,4 @@ public partial class DuplicatesWindow : Window
         return true;
     }
 
-    /// <summary>
-    /// Closes the window.
-    /// </summary>
-    /// <param name="sender">The Close button.</param>
-    /// <param name="e">Unused.</param>
-    private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
 }

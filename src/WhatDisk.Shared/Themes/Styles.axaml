@@ -247,6 +247,73 @@
     <Setter Property="FontSize" Value="12" />
   </Style>
 
+  <!-- The main window's tab strip -->
+  <Style Selector="Border.tab-strip">
+    <Setter Property="Padding" Value="8,4,8,0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+  <Style Selector="Border.tab-strip TabStripItem">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="12,4" />
+  </Style>
+  <Style Selector="Button.tab-close">
+    <Setter Property="Width" Value="18" />
+    <Setter Property="Height" Value="18" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.tab-close TextBlock">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Margin" Value="0,-2,0,0" />
+  </Style>
+  <Style Selector="Button.tab-close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SubtleHoverBrush}" />
+  </Style>
+
+  <!-- In-window dialogs: a scrim over the window and a card in the middle -->
+  <Style Selector="Panel.dialog-layer">
+    <Setter Property="Background" Value="{DynamicResource ScrimBrush}" />
+  </Style>
+  <Style Selector="Border.dialog-card">
+    <Setter Property="Background" Value="{DynamicResource PagePlaneBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="BoxShadow" Value="0 8 32 0 #40000000" />
+    <Setter Property="MaxWidth" Value="520" />
+  </Style>
+
+  <!-- A small round "i" button that explains a pane -->
+  <Style Selector="Button.info">
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="16" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="ToolTip.ShowDelay" Value="200" />
+  </Style>
+  <Style Selector="Button.info TextBlock">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontStyle" Value="Italic" />
+  </Style>
+
   <Style Selector="TextBlock.hash">
     <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, Monaco, monospace" />
     <Setter Property="FontSize" Value="12" />

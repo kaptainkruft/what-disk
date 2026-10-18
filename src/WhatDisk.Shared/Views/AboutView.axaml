@@ -1,12 +1,11 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:hosting="using:WhatDisk.Hosting"
-        x:Class="WhatDisk.Views.AboutWindow"
-        x:DataType="hosting:AppVersionInfo"
-        Title="{Binding ProductName, StringFormat='About {0}'}"
-        Width="400" SizeToContent="Height"
-        CanResize="False" ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner">
+<views:InWindowDialog xmlns="https://github.com/avaloniaui"
+                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                      xmlns:hosting="using:WhatDisk.Hosting"
+                      xmlns:views="using:WhatDisk.Views"
+                      x:Class="WhatDisk.Views.AboutView"
+                      x:DataType="hosting:AppVersionInfo"
+                      Width="400">
+  <!-- The About box, shown inside the main window. -->
   <StackPanel Margin="28,24" Spacing="4">
     <Image Source="{StaticResource WhatDisk.Icon.volume}" Width="56" Height="56" HorizontalAlignment="Center" Margin="0,0,0,8" />
     <TextBlock Text="{Binding ProductName}" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
@@ -16,6 +15,6 @@
                IsVisible="{Binding Commit, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <TextBlock Classes="muted small" x:Name="RuntimeLine" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" />
     <TextBlock Classes="muted small" Text="{Binding Copyright}" HorizontalAlignment="Center" />
-    <Button Content="OK" IsDefault="True" IsCancel="True" HorizontalAlignment="Center" MinWidth="80" Margin="0,16,0,0" Click="OnOkClick" />
+    <Button x:Name="OkButton" Content="OK" IsDefault="True" HorizontalAlignment="Center" MinWidth="80" Margin="0,16,0,0" Click="OnOkClick" />
   </StackPanel>
-</Window>
+</views:InWindowDialog>

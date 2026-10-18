@@ -35,7 +35,7 @@ public static class SettingsCatalog
     /// </summary>
     public static IReadOnlyList<SettingSection> Sections { get; } =
     [
-        new(GeneralKey, "General", "Appearance and how sizes are shown.", [General.Theme, General.SizeUnits]),
+        new(GeneralKey, "General", "Appearance, how sizes are shown, and where the menus are.", [General.Theme, General.SizeUnits, General.UseMenuBar]),
         new(
             ScanningKey,
             "Scanning",
@@ -44,8 +44,8 @@ public static class SettingsCatalog
         new(
             DuplicatesKey,
             "Duplicates",
-            "How Tools › Find Duplicates compares files.",
-            [Duplicates.HashUpToMiB, Duplicates.SampleCount, Duplicates.SampleSizeKiB, Duplicates.Readers, Duplicates.VerifyAutomatically]),
+            "How Tools › Find Duplicates compares files, and what the Potential duplicate space pane counts.",
+            [Duplicates.HashUpToMiB, Duplicates.SampleCount, Duplicates.SampleSizeKiB, Duplicates.Readers, Duplicates.VerifyAutomatically, Duplicates.EstimateOverMiB]),
         new(
             DeletingKey,
             "Deleting",
@@ -80,6 +80,18 @@ public static class SettingsCatalog
             "How sizes are counted. The default follows the system: decimal in the Finder, binary in File Explorer.",
             [new("decimal", "Decimal (1 KB = 1,000 bytes)"), new("binary", "Binary (1 KB = 1,024 bytes)")],
             static platform => platform.ByteUnits == ByteUnitConvention.PowersOf1024 ? "binary" : "decimal");
+
+        /// <summary>
+        /// Whether the menus are in the macOS menu bar (the default) or drawn at the top of the window, as Avalonia's
+        /// <c>MacOSPlatformOptions.DisableNativeMenus</c> option does. Read at start-up.
+        /// </summary>
+        public static readonly BoolSetting UseMenuBar = new(
+            GeneralKey,
+            "useMenuBar",
+            "Use the macOS menu bar",
+            "Show the menus in the menu bar at the top of the screen, as Mac apps do. When off, they are drawn at the top of the window instead, with Quit, Settings and About in them. Takes effect the next time WhatDisk starts.",
+            true,
+            SettingPlatform.MacOS);
     }
 
     /// <summary>
@@ -210,6 +222,19 @@ public static class SettingsCatalog
             "Verify sampled sets automatically",
             "As soon as the results appear, hash the sets that only matched on samples, as Verify All by Hash does.",
             false);
+
+        /// <summary>The length, in MiB, files must exceed to count in the Potential duplicate space pane.</summary>
+        public static readonly IntSetting EstimateOverMiB = new(
+            DuplicatesKey,
+            "estimateOverMiB",
+            "Estimate duplicate space among files over",
+            "The Potential duplicate space pane counts files larger than this that share their size with another file, from the scan alone.",
+            1,
+            0,
+            1024)
+        {
+            Unit = "MiB",
+        };
     }
 
     /// <summary>

@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WhatDisk.ViewModels"
+             xmlns:controls="using:WhatDisk.Views.Controls"
+             x:Class="WhatDisk.Views.PotentialDuplicatesPane"
+             x:DataType="vm:MainWindowViewModel">
+  <!--
+    A narrow card: a size-only estimate of the space copies of large files take in the charted folder, and a bar of
+    its share of that folder. What it counts is behind the info button (hover, or click for keyboard and touch).
+  -->
+  <Border Classes="card" Padding="12,10">
+    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6" RowDefinitions="Auto,Auto">
+      <TextBlock Classes="card-title" Text="Potential duplicate space" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <Button x:Name="InfoButton" Grid.Column="1" Classes="info" VerticalAlignment="Center"
+              IsVisible="{Binding PotentialDuplicates.HasEstimate}"
+              ToolTip.Tip="{Binding PotentialDuplicates.InfoText}"
+              AutomationProperties.Name="About the potential duplicate space">
+        <TextBlock Text="i" />
+        <Button.Flyout>
+          <Flyout Placement="BottomEdgeAlignedLeft">
+            <TextBlock Text="{Binding PotentialDuplicates.InfoText}" TextWrapping="Wrap" MaxWidth="300" />
+          </Flyout>
+        </Button.Flyout>
+      </Button>
+      <TextBlock x:Name="AmountText" Grid.Column="3" Classes="chart-total" Text="{Binding PotentialDuplicates.AmountText}" VerticalAlignment="Center" />
+      <controls:PercentBar x:Name="ShareBar" Grid.Row="1" Grid.ColumnSpan="4" Margin="0,8,0,0"
+                           IsTextInside="True" BarHeight="18" TextElement.FontSize="11"
+                           Value="{Binding PotentialDuplicates.Fraction}"
+                           Text="{Binding PotentialDuplicates.PercentText}"
+                           BarBrush="{DynamicResource ChartSeries0Brush}"
+                           TrackBrush="{DynamicResource NeutralTrackBrush}"
+                           FillForeground="White"
+                           IsVisible="{Binding PotentialDuplicates.HasEstimate}" />
+    </Grid>
+  </Border>
+</UserControl>

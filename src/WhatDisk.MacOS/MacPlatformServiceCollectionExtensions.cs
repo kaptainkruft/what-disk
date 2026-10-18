@@ -36,10 +36,14 @@ internal static class MacPlatformServiceCollectionExtensions
     /// Adds the macOS services.
     /// </summary>
     /// <param name="services">The service collection.</param>
+    /// <param name="useMenuBar">
+    /// Whether the menus are in the macOS menu bar; when not, they are drawn in the window (with Quit, Settings and
+    /// About), as on Windows.
+    /// </param>
     /// <returns>The same collection, for chaining.</returns>
-    public static IServiceCollection AddMacOSPlatform(this IServiceCollection services)
+    public static IServiceCollection AddMacOSPlatform(this IServiceCollection services, bool useMenuBar = true)
     {
-        services.AddSingleton(Capabilities);
+        services.AddSingleton(useMenuBar ? Capabilities : Capabilities with { HasApplicationMenu = false });
         services.AddSingleton<IFileSystemEnumerator>(static _ => MacFileSystemEnumerator.CreateOrFallback());
         services.AddSingleton<IVolumeService, MacVolumeService>();
         services.AddSingleton<IIconProvider, MacIconProvider>();

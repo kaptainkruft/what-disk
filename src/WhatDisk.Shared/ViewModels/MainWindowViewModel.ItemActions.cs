@@ -479,10 +479,10 @@ public sealed partial class MainWindowViewModel
         {
             // A rename within the volume: the node and everything beneath it simply change folder.
             oldParent.RemoveChild(item);
-            _fileTypeTotals.Invalidate(oldParent);
+            InvalidateTotals(oldParent);
             item.Parent = destination;
             destination.InsertChild(item);
-            _fileTypeTotals.Invalidate(destination);
+            InvalidateTotals(destination);
             return;
         }
 
@@ -500,7 +500,7 @@ public sealed partial class MainWindowViewModel
             destination.InsertChild(FileNode.FromEntry(destination, entry));
         }
 
-        _fileTypeTotals.Invalidate(destination);
+        InvalidateTotals(destination);
     }
 
     /// <summary>
@@ -512,7 +512,7 @@ public sealed partial class MainWindowViewModel
         if (node.Parent is { } parent)
         {
             parent.RemoveChild(node);
-            _fileTypeTotals.Invalidate(parent);
+            InvalidateTotals(parent);
         }
     }
 
@@ -561,7 +561,7 @@ public sealed partial class MainWindowViewModel
         {
             OpenCommand, OpenWithCommand, RevealCommand, QuickLookCommand, GetInfoCommand, CopyItemsCommand,
             CopyPathCommand, SelectAllCommand, ExpandAllCommand, CollapseAllCommand, RescanCommand, MoveToTrashCommand,
-            DeletePermanentlyCommand, FindDuplicatesCommand,
+            DeletePermanentlyCommand, FindDuplicatesInScanCommand, FindDuplicatesInSelectionCommand,
         })
         {
             command.NotifyCanExecuteChanged();
@@ -629,8 +629,8 @@ public sealed partial class MainWindowViewModel
     /// <summary>
     /// Determines whether there is a selection to act on from the keyboard or a menu.
     /// </summary>
-    /// <returns><see langword="true"/> when the tree is active and something is selected.</returns>
-    private bool HasActionableSelection() => IsTreeActive && Selection.Count > 0;
+    /// <returns><see langword="true"/> when the tree is active, something is selected and no question is being asked.</returns>
+    private bool HasActionableSelection() => IsTreeActive && !IsDialogOpen && Selection.Count > 0;
 
     /// <summary>
     /// Determines whether Open is enabled.

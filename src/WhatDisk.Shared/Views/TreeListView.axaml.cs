@@ -298,6 +298,7 @@ public partial class TreeListView : UserControl
                 Item("Expand All Beneath", viewModel.ExpandAllCommand, keys.ExpandAll),
                 Item("Collapse All Beneath", viewModel.CollapseAllCommand, keys.CollapseAll),
                 Item("Rescan", viewModel.RescanCommand, keys.Rescan),
+                Item("Find Duplicates in Selection", viewModel.FindDuplicatesInSelectionCommand, keys.FindDuplicatesInSelection),
                 new Separator(),
                 Item($"Move to {platform.TrashName}", viewModel.MoveToTrashCommand, keys.MoveToTrash, ShellCapabilities.Trash),
                 Item($"{platform.PermanentDeleteName}\u2026", viewModel.DeletePermanentlyCommand, keys.DeletePermanently),
@@ -527,6 +528,7 @@ public partial class TreeListView : UserControl
             (keys.ExpandAll, viewModel.ExpandAllCommand),
             (keys.CollapseAll, viewModel.CollapseAllCommand),
             (keys.Rescan, viewModel.RescanCommand),
+            (keys.FindDuplicatesInSelection, viewModel.FindDuplicatesInSelectionCommand),
             (keys.MoveToTrash, viewModel.MoveToTrashCommand),
             (keys.DeletePermanently, viewModel.DeletePermanentlyCommand),
         ];

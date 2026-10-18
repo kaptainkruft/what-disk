@@ -13,10 +13,10 @@ using WhatDisk.Views;
 namespace WhatDisk.Tests.Views;
 
 /// <summary>
-/// Renders the settings window headlessly. Set the <c>WHATDISK_SCREENSHOTS</c> environment variable to a directory to
+/// Renders the settings view (a tab of the main window) headlessly. Set the <c>WHATDISK_SCREENSHOTS</c> environment variable to a directory to
 /// keep the rendered frames for review.
 /// </summary>
-public sealed class SettingsWindowTests : IDisposable
+public sealed class SettingsViewTests : IDisposable
 {
     /// <summary>The folder holding the settings file, deleted after each test.</summary>
     private readonly DirectoryInfo _temp = Directory.CreateTempSubdirectory("whatdisk-settings-window-");
@@ -51,13 +51,12 @@ public sealed class SettingsWindowTests : IDisposable
         Assert.Contains(page.PlatformNote, texts);
         var resets = window.GetVisualDescendants().OfType<Button>().Where(static button => button.Content as string == "Reset").ToList();
         Assert.Single(resets, static button => button.IsEffectivelyVisible);
-        Assert.False(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Close").IsVisible);
-        Capture(window, $"settings-window-{variant.ToLowerInvariant()}.png");
+        Capture(window, $"settings-view-{variant.ToLowerInvariant()}.png");
         window.Close();
     }
 
     /// <summary>
-    /// Changing a control saves the setting; on Windows the window has a Close button.
+    /// Changing a control saves the setting; the view has no Close button, as its tab closes like any other.
     /// </summary>
     [AvaloniaFact]
     public void Controls_SaveTheirSettings()
@@ -77,40 +76,40 @@ public sealed class SettingsWindowTests : IDisposable
         Assert.False(settings.Get(SettingsCatalog.Deleting.WarnWhenNotRecyclable));
         Assert.Equal(25, settings.Get(SettingsCatalog.Deleting.ConfirmAboveFiles));
         Assert.Contains("\"windows\"", File.ReadAllText(path), StringComparison.Ordinal);
-        Assert.True(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Close").IsVisible);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<Button>(), static button => button.Content as string == "Close");
         window.Close();
     }
 
     /// <summary>
-    /// The dialog service opens one settings window at most, owned by the main window; asking again brings it back.
+    /// Restore Defaults asks first, through the dialog service, and resets only when confirmed.
     /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
-    public void DialogService_OpensOneSettingsWindow()
+    public async Task RestoreDefaults_AsksFirst()
     {
-        var main = new Window();
-        main.Show();
-        var service = new WindowDialogService(() => main);
         var settings = new AppSettings(TestPlatforms.MacOS, null);
+        settings.Set(SettingsCatalog.Scanning.Threads, 8);
+        var dialogs = new ScriptedDialogService { Confirm = false };
+        using var page = new SettingsViewModel(settings, new RecordingShellService(), dialogs);
 
-        service.ShowSettings(new SettingsViewModel(settings, new RecordingShellService()));
-        service.ShowSettings(new SettingsViewModel(settings, new RecordingShellService()));
+        await page.RestoreDefaultsCommand.ExecuteAsync(null);
+        Assert.Equal(8, settings.Get(SettingsCatalog.Scanning.Threads));
+        Assert.Equal("Restore every setting to its default?", Assert.Single(dialogs.Confirmations).Title);
 
-        var shown = Assert.IsType<SettingsWindow>(Assert.Single(main.OwnedWindows));
-        shown.Close();
-        service.ShowSettings(new SettingsViewModel(settings, new RecordingShellService()));
-        Assert.Single(main.OwnedWindows);
-        main.Close();
+        dialogs.Confirm = true;
+        await page.RestoreDefaultsCommand.ExecuteAsync(null);
+        Assert.Equal(0, settings.Get(SettingsCatalog.Scanning.Threads));
     }
 
     /// <summary>
-    /// Shows the settings window.
+    /// Shows the settings view in a window the size the settings tab has.
     /// </summary>
     /// <param name="settings">The settings.</param>
     /// <returns>The window and its view model.</returns>
-    private static (SettingsWindow Window, SettingsViewModel Page) Show(AppSettings settings)
+    private static (Window Window, SettingsViewModel Page) Show(AppSettings settings)
     {
         var page = new SettingsViewModel(settings, new RecordingShellService());
-        var window = new SettingsWindow { DataContext = page };
+        var window = new Window { Width = 860, Height = 600, Content = new SettingsView { DataContext = page } };
         window.Closed += (_, _) => page.Dispose();
         window.Show();
         Dispatcher.UIThread.RunJobs();

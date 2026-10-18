@@ -120,6 +120,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _fileTypeTotals = new FileTypeAggregator(_fileTypes);
         _shell = shell ?? new DefaultShellService();
         _dialogs = dialogs ?? new DecliningDialogService();
+        _dialogs.IsShowingChanged += OnDialogShowingChanged;
+        ScanTab = new ScanTabViewModel { IsSelected = true };
+        Tabs = [ScanTab];
+        _selectedTab = ScanTab;
         _enumerator = enumerator ?? new ManagedFileSystemEnumerator();
         _transfer = new FileTransfer(platform.PathComparison);
         Tree = new TreeListModel(_sizes);
@@ -128,6 +132,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Selection = new SelectionModel<TreeRowViewModel> { SingleSelect = false, Source = Tree.Rows };
         Selection.SelectionChanged += OnSelectionChanged;
         Chart = new PieChartViewModel(_sizes);
+        PotentialDuplicates = new PotentialDuplicatesViewModel(_sizes);
+        _potentialDuplicateTotals = CreatePotentialDuplicateAggregator();
         Details = new SelectionDetailsViewModel(_sizes, platform);
         StatusText = IdleStatus;
     }
@@ -377,6 +383,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _session?.Dispose();
         Settings.Changed -= OnSettingChanged;
+        _dialogs.IsShowingChanged -= OnDialogShowingChanged;
         Tree.Reconciling -= OnTreeReconciling;
         Tree.Reconciled -= OnTreeReconciled;
     }
@@ -545,6 +552,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SelectedRow = null;
         Tree.Clear();
         Chart.Clear();
+        PotentialDuplicates.Clear();
         Details.Show(null, 0, isScanRunning: true);
         IsScanning = true;
         Refresh();
@@ -655,10 +663,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool CanScanVolume(VolumeItemViewModel? volume) => !IsScanning && CanChooseTarget() && volume is not null;
 
     /// <summary>
-    /// Determines whether something else may be chosen to scan: not while a duplicate search runs.
+    /// Determines whether something else may be chosen to scan: not while a duplicate search runs or a question is
+    /// being asked.
     /// </summary>
     /// <returns><see langword="true"/> when Browse is enabled.</returns>
-    private bool CanChooseTarget() => !IsFindingDuplicates;
+    private bool CanChooseTarget() => !IsFindingDuplicates && !IsDialogOpen;
 
     /// <summary>
     /// Sets the path box without disturbing the record of how it was set.
@@ -854,7 +863,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Charts the file types in the selected folder (or the folder of the selected item, or every scan root),
-    /// highlighting the type of the selected file. The totals are computed off the UI thread; when a computation is
+    /// highlighting the type of the selected file, and estimates the potential duplicate space there. The totals are computed off the UI thread; when a computation is
     /// already running, another one follows as soon as it finishes.
     /// </summary>
     private void UpdateChart()
@@ -863,10 +872,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             _chartedScope = default;
             Chart.Clear();
+            PotentialDuplicates.Clear();
             return;
         }
 
-        var (title, scope, nodes, highlight) = DescribeChartScope(session);
+        var (name, scope, nodes, highlight) = DescribeChartScope(session);
         if (_chartedScope is { IsFinal: true } charted && ReferenceEquals(charted.Scope, scope) && !session.IsRunning)
         {
             // Nothing in a finished scan changes any more; only the highlighted type can differ.
@@ -885,26 +895,31 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _chartBusy = true;
         }
 
-        _chartUpdate = UpdateChartAsync(title, scope, nodes, highlight, isFinal: !session.IsRunning);
+        _chartUpdate = UpdateChartAsync(name, scope, nodes, highlight, isFinal: !session.IsRunning);
     }
 
     /// <summary>
-    /// Computes the file-type totals on a background thread and shows them.
+    /// Computes the file-type totals and the potential duplicate space on a background thread and shows them.
     /// </summary>
-    /// <param name="title">The chart title.</param>
+    /// <param name="name">The name of what is charted, such as a folder's name.</param>
     /// <param name="scope">Identifies what is charted.</param>
     /// <param name="nodes">The nodes whose files are totalled.</param>
     /// <param name="highlight">The type to highlight, if any.</param>
     /// <param name="isFinal">Whether the scan had finished, so the result cannot change.</param>
     /// <returns>A task that completes when the chart has been updated.</returns>
-    private async Task UpdateChartAsync(string title, object scope, IReadOnlyList<FileSystemNode> nodes, string? highlight, bool isFinal)
+    private async Task UpdateChartAsync(string name, object scope, IReadOnlyList<FileSystemNode> nodes, string? highlight, bool isFinal)
     {
         try
         {
-            var items = await Task.Run(() => _fileTypeTotals.Aggregate(nodes)
-                .Select(total => new ChartItem(total.Key, FileTypes.Label(total.Key), _fileTypes.Describe(total.Key), total.Value))
-                .ToArray());
-            Chart.Update(title, scope, items, highlight);
+            var potential = _potentialDuplicateTotals;
+            var (items, estimate, scopeBytes) = await Task.Run(() => (
+                _fileTypeTotals.Aggregate(nodes)
+                    .Select(total => new ChartItem(total.Key, FileTypes.Label(total.Key), _fileTypes.Describe(total.Key), total.Value))
+                    .ToArray(),
+                potential.Estimate(nodes),
+                nodes.Sum(static node => node.Size)));
+            Chart.Update($"File types in {name}", scope, items, highlight);
+            PotentialDuplicates.Update(estimate, name, DescribeMebibytes(potential.MinimumLength), scopeBytes);
             _chartedScope = (scope, isFinal);
         }
 #pragma warning disable CA1031 // The chart is best effort; a failure must not break the scan or the window.
@@ -932,14 +947,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// Works out what the chart shows for the current selection.
     /// </summary>
     /// <param name="session">The scan.</param>
-    /// <returns>The title, an object identifying the scope, the nodes to total and the type to highlight.</returns>
-    private (string Title, object Scope, IReadOnlyList<FileSystemNode> Nodes, string? Highlight) DescribeChartScope(ScanSession session)
+    /// <returns>
+    /// The name of what is charted, an object identifying the scope, the nodes to total and the type to highlight.
+    /// </returns>
+    private (string Name, object Scope, IReadOnlyList<FileSystemNode> Nodes, string? Highlight) DescribeChartScope(ScanSession session)
     {
         var selected = SelectedRow?.Node;
         switch (selected)
         {
             case DirectoryNode directory when directory is RootNode || _fileTypes.GetPackageType(directory) is null:
-                return ($"File types in {directory.Name}", directory, [directory], null);
+                return (directory.Name, directory, [directory], null);
             case { Parent: { } parent }:
                 var highlight = selected switch
                 {
@@ -947,12 +964,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     DirectoryNode package => _fileTypes.GetPackageType(package),
                     _ => null,
                 };
-                return ($"File types in {parent.Name}", parent, [parent], highlight);
+                return (parent.Name, parent, [parent], highlight);
             default:
                 var roots = session.Roots;
                 return roots.Count == 1
-                    ? ($"File types in {roots[0].Name}", roots[0], [roots[0]], null)
-                    : ("File types in all scanned volumes", session, roots, null);
+                    ? (roots[0].Name, roots[0], [roots[0]], null)
+                    : ("all scanned volumes", session, roots, null);
         }
     }
 

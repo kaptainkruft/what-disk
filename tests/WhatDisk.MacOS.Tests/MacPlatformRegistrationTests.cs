@@ -38,6 +38,22 @@ public sealed class MacPlatformRegistrationTests
     }
 
     /// <summary>
+    /// With the macOS menu bar turned off in the settings, the conventions say there is no application menu, so the
+    /// window draws its menus with Quit, Settings and About in them.
+    /// </summary>
+    [Fact]
+    public void CreateServices_WithoutTheMenuBar_HasNoApplicationMenu()
+    {
+        using var services = WhatDiskApp.CreateServices(static collection => collection.AddMacOSPlatform(useMenuBar: false));
+
+        var platform = services.GetRequiredService<PlatformCapabilities>();
+
+        Assert.False(platform.HasApplicationMenu);
+        Assert.Equal("macOS", platform.PlatformName);
+        Assert.True(MacPlatformServiceCollectionExtensions.Capabilities.HasApplicationMenu);
+    }
+
+    /// <summary>
     /// The app turns off .NET's advisory file locks, which macOS apps ignore: otherwise opening a file that another
     /// program has locked (as Chromium-based apps and SQLite databases do) fails as "in use", so the duplicate search
     /// could not read it and copying it would fail. The Native AOT build compiles in the same setting.

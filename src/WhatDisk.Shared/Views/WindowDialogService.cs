@@ -1,51 +1,59 @@
-using Avalonia.Controls;
 using WhatDisk.FileOperations;
 using WhatDisk.ViewModels;
 
 namespace WhatDisk.Views;
 
 /// <summary>
-/// Asks questions with modal windows over the main window, and shows results and the settings (one window at most) in
-/// windows the main window owns.
+/// Asks questions inside the main window, over its dimmed, disabled content, rather than in windows of their own.
 /// </summary>
-/// <param name="owner">Gets the window that owns the questions.</param>
-public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
+public sealed class WindowDialogService : IDialogService
 {
-    /// <summary>The settings window, while it is open.</summary>
-    private SettingsWindow? _settingsWindow;
+    /// <summary>Gets the main window.</summary>
+    private readonly Func<MainWindow?> _owner;
+
+    /// <summary>The main window the service listens to, once known.</summary>
+    private MainWindow? _subscribed;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WindowDialogService"/> class.
+    /// </summary>
+    /// <param name="owner">Gets the main window, which shows the questions.</param>
+    public WindowDialogService(Func<MainWindow?> owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        _owner = owner;
+        Subscribe(owner());
+    }
+
+    /// <inheritdoc/>
+    public event EventHandler? IsShowingChanged;
+
+    /// <inheritdoc/>
+    public bool IsShowing => _subscribed?.IsShowingDialog == true;
 
     /// <inheritdoc/>
     public async Task<bool> ConfirmAsync(ConfirmationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (owner() is not { IsVisible: true } window)
-        {
-            return false;
-        }
 
         // A destructive action is never the default, so Return alone cannot destroy anything.
         var cancel = new QuestionButton("Cancel", "cancel", IsDefault: request.IsDestructive, IsCancel: true);
         var confirm = new QuestionButton(request.ConfirmText, "confirm", IsDefault: !request.IsDestructive, IsDestructive: request.IsDestructive);
 
         // macOS puts the confirming button last (rightmost); Windows puts it first, before Cancel.
-        var question = new QuestionWindow(request.Title, request.Message, OperatingSystem.IsMacOS() ? [cancel, confirm] : [confirm, cancel]);
-        return await question.ShowAsync(window) == "confirm";
+        var question = new QuestionView(request.Title, request.Message, OperatingSystem.IsMacOS() ? [cancel, confirm] : [confirm, cancel]);
+        return await AskAsync(question) == "confirm";
     }
 
     /// <inheritdoc/>
     public async Task<ConflictDecision> ResolveConflictAsync(TransferConflict conflict)
     {
         ArgumentNullException.ThrowIfNull(conflict);
-        if (owner() is not { IsVisible: true } window)
-        {
-            return new ConflictDecision(ConflictResolution.Skip);
-        }
-
         var name = Path.GetFileName(conflict.ExistingPath);
         var parent = Path.GetDirectoryName(conflict.ExistingPath) ?? conflict.ExistingPath;
         var folder = Path.GetFileName(parent) is { Length: > 0 } folderName ? folderName : parent;
         var kind = conflict.IsDirectory ? "folder" : "item";
-        var question = new QuestionWindow(
+        var question = new QuestionView(
             $"An {kind} named “{name}” already exists in “{folder}”.",
             "Replace it, keep both (the new one gets a numbered name), skip this item, or stop?",
             [
@@ -55,51 +63,57 @@ public sealed class WindowDialogService(Func<Window?> owner) : IDialogService
                 new QuestionButton("Replace", nameof(ConflictResolution.Replace), IsDestructive: true),
             ],
             "Apply to all");
-        var answer = await question.ShowAsync(window);
+        var answer = await AskAsync(question);
+        if (answer is null)
+        {
+            return new ConflictDecision(ConflictResolution.Skip);
+        }
+
         var resolution = Enum.TryParse<ConflictResolution>(answer, out var parsed) ? parsed : ConflictResolution.Stop;
         return new ConflictDecision(resolution, question.IsChecked);
     }
 
-    /// <inheritdoc/>
-    public void ShowDuplicates(DuplicateResultsViewModel results)
+    /// <summary>
+    /// Shows a question in the main window and waits for the answer.
+    /// </summary>
+    /// <param name="question">The question.</param>
+    /// <returns>The answer, or <see langword="null"/> when there is no visible main window to ask in.</returns>
+    private async Task<string?> AskAsync(QuestionView question)
     {
-        ArgumentNullException.ThrowIfNull(results);
-        var window = new DuplicatesWindow { DataContext = results };
-        if (owner() is { IsVisible: true } main)
+        if (_owner() is not { IsVisible: true } window)
         {
-            window.Show(main);
+            return null;
         }
-        else
-        {
-            window.Show();
-        }
+
+        Subscribe(window);
+        return await window.ShowDialogAsync(question);
     }
 
-    /// <inheritdoc/>
-    public void ShowSettings(SettingsViewModel settings)
+    /// <summary>
+    /// Listens to a main window's dialogs (questions and the About box), so that <see cref="IsShowingChanged"/> follows
+    /// them all.
+    /// </summary>
+    /// <param name="window">The main window, or <see langword="null"/>.</param>
+    private void Subscribe(MainWindow? window)
     {
-        ArgumentNullException.ThrowIfNull(settings);
-        if (_settingsWindow is { } open)
+        if (window is null || ReferenceEquals(_subscribed, window))
         {
-            settings.Dispose();
-            open.Activate();
             return;
         }
 
-        var window = new SettingsWindow { DataContext = settings };
-        window.Closed += (_, _) =>
+        if (_subscribed is not null)
         {
-            settings.Dispose();
-            _settingsWindow = null;
-        };
-        _settingsWindow = window;
-        if (owner() is { IsVisible: true } main)
-        {
-            window.Show(main);
+            _subscribed.DialogShowingChanged -= OnDialogShowingChanged;
         }
-        else
-        {
-            window.Show();
-        }
+
+        _subscribed = window;
+        window.DialogShowingChanged += OnDialogShowingChanged;
     }
+
+    /// <summary>
+    /// Passes on that a question started or stopped showing.
+    /// </summary>
+    /// <param name="sender">The main window.</param>
+    /// <param name="e">Unused.</param>
+    private void OnDialogShowingChanged(object? sender, EventArgs e) => IsShowingChanged?.Invoke(this, e);
 }

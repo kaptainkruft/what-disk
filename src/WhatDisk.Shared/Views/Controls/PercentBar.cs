@@ -8,7 +8,8 @@ namespace WhatDisk.Views.Controls;
 
 /// <summary>
 /// A horizontal bar that fills from the left in proportion to <see cref="Value"/>, followed by a right-aligned
-/// percentage. Drawn directly rather than templated, because every row of the tree contains two of them.
+/// percentage, or with the percentage centred inside the bar when <see cref="IsTextInside"/> is set. Drawn directly
+/// rather than templated, because every row of the tree contains two of them.
 /// </summary>
 public sealed class PercentBar : Control
 {
@@ -54,6 +55,18 @@ public sealed class PercentBar : Control
     public static readonly StyledProperty<double> TextWidthProperty =
         AvaloniaProperty.Register<PercentBar, double>(nameof(TextWidth), 46);
 
+    /// <summary>
+    /// Identifies the <see cref="IsTextInside"/> property.
+    /// </summary>
+    public static readonly StyledProperty<bool> IsTextInsideProperty =
+        AvaloniaProperty.Register<PercentBar, bool>(nameof(IsTextInside));
+
+    /// <summary>
+    /// Identifies the <see cref="FillForeground"/> property.
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> FillForegroundProperty =
+        AvaloniaProperty.Register<PercentBar, IBrush?>(nameof(FillForeground));
+
     /// <summary>The space between the bar and the text.</summary>
     private const double Gap = 6;
 
@@ -65,8 +78,8 @@ public sealed class PercentBar : Control
     /// </summary>
     static PercentBar()
     {
-        AffectsRender<PercentBar>(ValueProperty, TextProperty, BarBrushProperty, TrackBrushProperty, ForegroundProperty, BarHeightProperty, TextWidthProperty);
-        AffectsMeasure<PercentBar>(BarHeightProperty, TextWidthProperty);
+        AffectsRender<PercentBar>(ValueProperty, TextProperty, BarBrushProperty, TrackBrushProperty, ForegroundProperty, BarHeightProperty, TextWidthProperty, IsTextInsideProperty, FillForegroundProperty);
+        AffectsMeasure<PercentBar>(BarHeightProperty, TextWidthProperty, IsTextInsideProperty);
     }
 
     /// <summary>
@@ -133,6 +146,25 @@ public sealed class PercentBar : Control
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the text is centred inside a full-width bar instead of beside it.
+    /// </summary>
+    public bool IsTextInside
+    {
+        get => GetValue(IsTextInsideProperty);
+        set => SetValue(IsTextInsideProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the brush for the part of the text inside over the filled part of the bar, so it stays readable;
+    /// <see langword="null"/> uses <see cref="Foreground"/> throughout.
+    /// </summary>
+    public IBrush? FillForeground
+    {
+        get => GetValue(FillForegroundProperty);
+        set => SetValue(FillForegroundProperty, value);
+    }
+
+    /// <summary>
     /// Builds the outline of a bar that is square at its left (baseline) end and rounded at its data end.
     /// </summary>
     /// <param name="rect">The bar's bounds.</param>
@@ -157,6 +189,12 @@ public sealed class PercentBar : Control
     {
         var size = Bounds.Size;
         var text = Text;
+        if (IsTextInside)
+        {
+            RenderTextInside(context, size, text);
+            return;
+        }
+
         var textWidth = string.IsNullOrEmpty(text) ? 0 : TextWidth;
         var barWidth = Math.Max(0, size.Width - textWidth - (textWidth > 0 ? Gap : 0));
         var barHeight = Math.Min(BarHeight, size.Height);
@@ -185,7 +223,56 @@ public sealed class PercentBar : Control
     protected override Size MeasureOverride(Size availableSize)
     {
         var height = Math.Max(BarHeight, string.IsNullOrEmpty(Text) ? 0 : GetFormattedText(Text)?.Height ?? 0);
-        return new Size(Math.Min(availableSize.Width, TextWidth + 24), height);
+        return IsTextInside
+            ? new Size(double.IsInfinity(availableSize.Width) ? TextWidth + 24 : availableSize.Width, height)
+            : new Size(Math.Min(availableSize.Width, TextWidth + 24), height);
+    }
+
+    /// <summary>
+    /// Draws a full-width bar with the text centred inside it. Where the text lies over the fill it is drawn with
+    /// <see cref="FillForeground"/>, elsewhere with <see cref="Foreground"/>.
+    /// </summary>
+    /// <param name="context">The drawing context.</param>
+    /// <param name="size">The control's size.</param>
+    /// <param name="text">The text, or <see langword="null"/>.</param>
+    private void RenderTextInside(DrawingContext context, Size size, string? text)
+    {
+        var barHeight = Math.Min(BarHeight, size.Height);
+        var top = Math.Round((size.Height - barHeight) / 2);
+        var bar = new Rect(0, top, size.Width, barHeight);
+        if (size.Width < 2)
+        {
+            return;
+        }
+
+        if (TrackBrush is { } track)
+        {
+            context.DrawGeometry(track, null, CreateBarGeometry(bar));
+        }
+
+        var fill = new Rect(0, top, size.Width * Math.Clamp(Value, 0, 1), barHeight);
+        if (fill.Width >= 0.5 && BarBrush is { } brush)
+        {
+            context.DrawGeometry(brush, null, CreateBarGeometry(fill));
+        }
+
+        if (string.IsNullOrEmpty(text) || GetFormattedText(text) is not { } formatted)
+        {
+            return;
+        }
+
+        var origin = new Point(Math.Round((size.Width - formatted.Width) / 2), Math.Round((size.Height - formatted.Height) / 2));
+        context.DrawText(formatted, origin);
+        if (FillForeground is { } onFill && fill.Width >= 0.5)
+        {
+            formatted.SetForegroundBrush(onFill);
+            using (context.PushClip(fill))
+            {
+                context.DrawText(formatted, origin);
+            }
+
+            formatted.SetForegroundBrush(Foreground ?? Brushes.Black);
+        }
     }
 
     /// <inheritdoc/>

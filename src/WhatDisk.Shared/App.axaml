@@ -9,7 +9,7 @@
     <NativeMenu>
       <NativeMenuItem Header="About WhatDisk" Click="OnAboutClicked" />
       <NativeMenuItemSeparator />
-      <NativeMenuItem Header="Settings…" Gesture="Cmd+OemComma" Click="OnSettingsClicked" />
+      <NativeMenuItem Header="Settings…" Gesture="Meta+OemComma" Click="OnSettingsClicked" />
     </NativeMenu>
   </NativeMenu.Menu>
   <Application.Styles>

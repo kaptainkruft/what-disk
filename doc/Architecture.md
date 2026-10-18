@@ -23,6 +23,80 @@ The context menu and menus are shared: one set of actions, named and bound to ke
 Info" or "Properties"), and backed by the head's `IShellService`. Actions a platform lacks (Quick Look on Windows) are
 hidden. The system's own context menu is not used on either platform.
 
+### One window, with tabs
+
+Everything the app shows lives in its one window. The main window has a tab strip under the menu bar:
+
+- **Scan** is always first and cannot be closed. It holds the toolbar for choosing what to scan, the tree, the chart,
+  the Potential duplicate space pane and the details.
+- **Each duplicate search** adds a tab with its results ("Duplicates in Photos"; the tooltip has the full scope) and
+  shows it. Closing the tab stops any hashing it is doing.
+- **Settings** opens in a tab too, one at most; opening it again shows the existing tab.
+- Close Tab (⌘W on macOS, Ctrl+W on Windows, and the × on each tab) closes any tab but Scan and shows the one before.
+
+The tabs are view models (`TabViewModel`: the Scan tab, `DuplicateResultsViewModel` and `SettingsViewModel`) in the
+main view model's `Tabs` collection, so tests drive them without a window. Every tab's page stays in place while
+hidden, so it keeps its scroll position, column widths and selection. Leaving the Scan tab makes the tree inactive, so
+the item commands and their shortcuts do not act on a tree that cannot be seen; coming back gives the tree focus again.
+A status bar along the bottom of the window shows scan and operation progress whichever tab is shown.
+
+Questions (delete confirmations, name conflicts, Restore Defaults) and the About box appear inside the window too, as
+a card over the dimmed, disabled content, rather than in windows of their own. Escape answers with the cancel button
+and Return with the default one. While one is showing, the commands wait (so shortcuts in the macOS menu bar cannot
+act behind it), and focus returns where it was afterwards.
+
+The app keeps to one window because Avalonia's support for several windows' menus on macOS is unreliable on macOS
+27: when a window closes while it is key, the menu bar is left with only the application menu, and a window's menus
+cannot be replaced once set. The only windows besides the main one are the system's own panels: the folder picker and
+the save dialog.
+
+### Menus
+
+The menus are set up exactly as Avalonia's documentation describes, and nothing works around Avalonia's behaviour:
+
+- The application menu (About and Settings…; Avalonia adds Hide, Show All and Quit) is `NativeMenu.Menu` on the
+  `Application` in `App.axaml`.
+- The window's menus (File, Edit, View, Tools and, on Windows, Help) are `NativeMenu.Menu` on the `Window` in
+  `MainWindow.axaml`, bound to the view model's commands. A `NativeMenuBar` draws them in the window where there is
+  no system menu bar. They are declared once and never changed: headers and visibility depend only on the platform
+  (macOS drops the access key underscores itself), and enabled states follow the commands.
+- Nothing is rebuilt while the app runs. In particular, Open With is only in the context menu (an Avalonia popup), not
+  in the menu bar: a submenu filled from `NeedsUpdate` would be rebuilt whenever macOS checked key equivalents, on
+  almost every ⌘-key press, and Avalonia then sends the whole window menu to the menu bar again.
+- The app sets no `MacOSPlatformOptions`, except `DisableNativeMenus` when **Settings › General › Use the macOS
+  menu bar** (`general.macos.useMenuBar`) is turned off. That option is read at start-up. With it, Avalonia sets
+  nothing in the macOS menu bar and the window draws its menus, as on Windows, adding Quit WhatDisk (⌘Q), Settings
+  and About.
+
+Avalonia still swaps `NSApp.mainMenu` itself whenever the window gains or loses key status: it shows the window's
+menus as the window becomes key and only the application menu as it resigns (`AvnWindow.mm`). On macOS 27 this shows
+as a brief flash of the application-only menu when clicking away to another app, and sometimes a menu bar that is not
+redrawn until the pointer moves over it when clicking back. These are Avalonia's
+([#22285](https://github.com/AvaloniaUI/Avalonia/issues/22285); see also
+[#22286](https://github.com/AvaloniaUI/Avalonia/issues/22286) and
+[#22287](https://github.com/AvaloniaUI/Avalonia/issues/22287)) and are left alone here until Avalonia fixes them.
+What moving off Avalonia would take is assessed in [Replacing Avalonia](AvaloniaReplacement.md).
+
+### Why Avalonia
+
+The app needed a desktop UI written in .NET 10 and C#, with one shared project and thin platform heads for macOS,
+Windows and Linux, a custom-drawn tree with bars, a pie chart, Native AOT builds, and UI tests that run anywhere.
+
+- **Avalonia** runs on all three platforms from one XAML codebase, draws its own controls with Skia (so the tree's
+  rows, bars and chart look and behave the same everywhere), supports Native AOT with compiled bindings, lets each
+  head choose its own backend (`UseAvaloniaNative` on macOS, `UseWin32` on Windows), and has a headless platform that
+  renders real windows in tests on any OS. It also offers native menu bar export on macOS.
+- **.NET MAUI** has no Linux desktop support, and runs on macOS through Mac Catalyst, an iPad-style app model.
+- **Uno Platform** covers all three through its Skia desktop target and would have worked. It follows WinUI's APIs
+  and project structure, which suit a Windows-first app more than this one.
+- **WPF, WinForms and WinUI** run on Windows only. **Eto.Forms** wraps each platform's native widgets, which suits
+  standard forms but makes a custom tree and chart harder to keep consistent. **Electron or Tauri** with a .NET back
+  end would mean writing the interface in a web stack and shipping a browser engine.
+
+The costs, found along the way: controls are drawn by Avalonia, so they look like Avalonia's Fluent theme rather than
+each system's own; `TreeDataGrid` needs a commercial licence from version 12, so the tree is built on a `ListBox`;
+and the macOS menu bar integration is thin and buggy on macOS 27, which led to the single-window design above.
+
 ### Scan engine
 
 - A `ScanSession` runs a fixed set of dedicated worker threads (the processor count, clamped to 4–16; 32 for network
@@ -54,6 +128,16 @@ hidden. The system's own context menu is not used on either platform.
   "other", colours that stay with their type, slices drawn in colour-slot order so neighbouring colours are always a
   tested pair, 2 px gaps between slices, a legend, tooltips and separate light and dark colours.
 
+- The **Potential duplicate space** pane, between the chart and the details, covers the same folder as the chart and
+  is computed in the same background pass. `PotentialDuplicateAggregator` groups the regular files over 1 MiB (the
+  `duplicates.estimateOverMiB` setting) by length. For each length shared by two or more files, the space they take
+  on disk beyond the smallest copy counts as potentially wasted. Extra hard links, cloud-only files and smaller files
+  are left out, and no file is read, so it is a dirty, size-only list that Find Duplicates later confirms by content.
+  Like the file-type totals, the groups of large completed folders are cached and forgotten when their contents
+  change, so the estimate follows the scan as it runs and stays cheap afterwards. The pane shows the total, a bar of its share of the
+  folder's size (in the chart's first colour, with the percentage inside), and an info button that explains what was
+  counted.
+
 ### File operations
 
 - Every action works on the topmost selected items, so a folder and a file inside it are never processed twice.
@@ -62,12 +146,17 @@ hidden. The system's own context menu is not used on either platform.
 - The scan tree is edited in place: a deleted or moved node is detached and its size and counts are subtracted from
   every ancestor; a moved node is attached to its new folder; a copied folder is scanned into its destination by a
   small scan session whose completion stops at that folder. Only the affected folders' chart totals are recomputed.
-- The view model asks questions through `IDialogService`, so tests answer them without windows. File manager actions
+- The view model asks questions through `IDialogService`, so tests answer them without a window. File manager actions
   go through `IShellService`, which reports what the platform supports so unsupported actions are hidden.
 
 ### Duplicate finder
 
-Tools › Find Duplicates searches everything the last scan found. It runs as a file operation, so the status bar shows
+A duplicate search takes a scope: the folders and files whose files it compares, as one set. **Tools › Find
+Duplicates in Scanned Files** (⇧⌘D on macOS, Ctrl+Shift+D on Windows) uses the scan's top-level items. **Find
+Duplicates in Selection** (⌘D, Ctrl+D; also in the context menu) uses the selected items, keeping only the topmost of
+nested ones. It is enabled when the selection could hold duplicates: a folder, or more than one item. Selecting two
+folders therefore finds copies between them as well as within each; the finder itself only sees one list of files.
+The results open in a new tab titled with the scope. A search runs as a file operation, so the status bar shows
 its progress and Stop cancels it. While it runs, the volume picker, path box, Browse and Scan are disabled, because a
 new scan would replace the tree being searched. It reads as little as it can:
 
@@ -85,18 +174,18 @@ new scan would replace the tree being searched. It reads as little as it can:
 
 Sampling is much cheaper, but it is not proof. Measured on real folders, about 0.3% of the files that 64 × 4 KiB
 samples matched were not identical: mostly signed binaries that differ only in their code signature. So the
-Duplicates window says how many sets are only sampled and asks for them to be verified before anything is deleted.
+results tab says how many sets are only sampled and asks for them to be verified before anything is deleted.
 **Verify All by Hash** hashes every sampled set, largest waste first, and a row's context menu has **Verify Set by
 Hash** for its set alone. Hashing confirms a set (its rows switch to Hash and show the hash, keeping the selection),
 drops the files that differ, or splits the set when it held two contents. The largest group keeps the set's number
-and the others get new numbers and follow it, so numbers already noted stay valid. Stop (or closing the window) ends
+and the others get new numbers and follow it, so numbers already noted stay valid. Stop (or closing the tab) ends
 hashing, and sets already hashed keep their results. Copy and Export wait until it finishes.
 
 Up to four files are read at a time, enough to keep a solid-state disk busy without making a spinning disk seek
 between too many files. Files are opened for shared reading, so files other programs have open are still compared.
-A file that cannot be read, or whose length changed since the scan, is reported in the results window and left out.
+A file that cannot be read, or whose length changed since the scan, is reported in the results tab and left out.
 
-Sets are numbered by the space they waste (length × (copies − 1)), largest first. The Duplicates window lists one row
+Sets are numbered by the space they waste (length × (copies − 1)), largest first. The results tab lists one row
 per file with its set, full path, size, hash and comparison, and shades every other set. Double-clicking a row shows
 the file in Finder or File Explorer. **Copy CSV** and **Export CSV…** produce the same RFC 4180 text: a header row
 (`SetID,Full Path,Size,Hash,Comparison`), sizes in bytes, an empty hash for sampled files, quotes only where needed,
@@ -121,9 +210,9 @@ the defaults, so a default changed in a later version reaches everyone who has n
 
 - **Catalogue.** `SettingsCatalog` defines every setting once: its section and key, label and description, type
   (on/off, a number with a range and unit, or a choice), default, and platform. The sections are the file's top-level
-  keys and the settings window's pages, in the same order. A default can follow the platform: sizes are decimal on
+  keys and the Settings tab's pages, in the same order. A default can follow the platform: sizes are decimal on
   macOS and binary on Windows, so choosing the platform's own units writes nothing.
-- **Platform settings** sit in their section's `macos` or `windows` subsection of the file. In the window they appear
+- **Platform settings** sit in their section's `macos` or `windows` subsection of the file. In the Settings tab they appear
   in their section with the others, marked with an asterisk, and only on their platform. A file shared between
   platforms keeps the other platform's settings untouched.
 - **Reading and writing.** `AppSettings` reads the file with comments and trailing commas allowed, as people edit it
@@ -136,11 +225,11 @@ the defaults, so a default changed in a later version reaches everyone who has n
   and volume list re-format every size. Other settings are read when next needed: scan threads and the network rule
   at the next scan, the duplicate options at the next search, confirmation thresholds at the next delete, and the
   macOS volume list and Windows Recycle Bin flags by the platform services.
-- **Window.** Settings is in the application menu on macOS (⌘,) and in Tools on Windows (Ctrl+,). The window has the
-  sections down the left, and for each setting its label, description, path in the file, an editor, and Reset when it
-  differs from the default (marked by an accent bar). Changes apply at once, so there is no OK or Cancel. **Open
-  Settings File** opens the JSON in the default editor, and coming back to the window re-reads it. **Restore
-  Defaults…** resets this platform's settings.
+- **Tab.** Settings is in the application menu on macOS (⌘,) and in Tools on Windows (Ctrl+,), and opens in a tab.
+  It has the sections down the left, and for each setting its label, description, path in the file, an editor, and
+  Reset when it differs from the default (marked by an accent bar). Changes apply at once, so there is no OK or
+  Cancel. **Open Settings File** opens the JSON in the default editor; showing the tab again, or coming back to the
+  window while it is shown, re-reads it. **Restore Defaults…** asks, then resets this platform's settings.
 
 ### Windows specifics
 

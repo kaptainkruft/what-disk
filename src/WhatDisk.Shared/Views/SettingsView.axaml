@@ -1,13 +1,9 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:WhatDisk.ViewModels"
-        xmlns:settings="using:WhatDisk.Settings"
-        x:Class="WhatDisk.Views.SettingsWindow"
-        x:DataType="vm:SettingsViewModel"
-        Title="Settings"
-        Width="860" Height="600"
-        MinWidth="640" MinHeight="400"
-        WindowStartupLocation="CenterOwner">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WhatDisk.ViewModels"
+             xmlns:settings="using:WhatDisk.Settings"
+             x:Class="WhatDisk.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
   <!--
     One page per section of the settings file, in the file's order. Each setting shows its label, description and path
     in the file, an editor, and Reset when it differs from the default. A platform's own settings are marked "*".
@@ -17,10 +13,9 @@
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
           <Button x:Name="OpenFileButton" Content="Open Settings File" Command="{Binding OpenFileCommand}"
-                  ToolTip.Tip="Edit the settings file in your JSON editor; changes appear when you return here" />
-          <Button x:Name="ResetAllButton" Content="Restore Defaults…" Click="OnResetAllClick"
+                  ToolTip.Tip="Edit the settings file in your JSON editor; changes appear when you come back to WhatDisk" />
+          <Button x:Name="ResetAllButton" Content="Restore Defaults…" Command="{Binding RestoreDefaultsCommand}"
                   ToolTip.Tip="Return every setting on every page to its default" />
-          <Button x:Name="CloseButton" Content="Close" MinWidth="72" HorizontalContentAlignment="Center" Click="OnCloseClick" />
         </StackPanel>
         <StackPanel VerticalAlignment="Center" Spacing="2">
           <TextBlock Classes="warning" Text="{Binding Message}" TextWrapping="Wrap"
@@ -99,9 +94,9 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
         <TextBlock Classes="muted small" Margin="0,12,0,0" TextWrapping="Wrap"
-                   Text="{Binding $parent[Window].((vm:SettingsViewModel)DataContext).PlatformNote}"
+                   Text="{Binding $parent[UserControl].((vm:SettingsViewModel)DataContext).PlatformNote}"
                    IsVisible="{Binding HasPlatformSettings}" />
       </StackPanel>
     </ScrollViewer>
   </DockPanel>
-</Window>
+</UserControl>

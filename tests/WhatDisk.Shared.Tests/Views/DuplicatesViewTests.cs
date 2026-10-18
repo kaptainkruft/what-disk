@@ -17,16 +17,16 @@ using WhatDisk.Views;
 namespace WhatDisk.Tests.Views;
 
 /// <summary>
-/// Renders the Duplicates window headlessly. Set the <c>WHATDISK_SCREENSHOTS</c> environment variable to a directory
+/// Renders the duplicate results view (a tab of the main window) headlessly. Set the <c>WHATDISK_SCREENSHOTS</c> environment variable to a directory
 /// to keep the rendered frames for review.
 /// </summary>
-public sealed class DuplicatesWindowTests
+public sealed class DuplicatesViewTests
 {
     /// <summary>Records the copies.</summary>
     private readonly RecordingShellService _shell = new();
 
     /// <summary>
-    /// The window lists every file with its set, path, size and hash under a header, and Copy CSV copies the CSV.
+    /// The view lists every file with its set, path, size and hash under a header, and Copy CSV copies the CSV.
     /// </summary>
     /// <param name="variant">The theme variant to render.</param>
     [AvaloniaTheory]
@@ -39,11 +39,12 @@ public sealed class DuplicatesWindowTests
             new DuplicateSet(1, 734_003_200, null, ["/Users/me/Desktop/Holiday copy.mov", "/Users/me/Movies/Holiday.mov", "/Volumes/Backup/2024/Holiday.mov"], DuplicateComparison.Samples),
             new DuplicateSet(2, 2_400_000, "3c59dc048e8850243be8079a5c74d079", ["/Users/me/Downloads/IMG_0042.HEIC", "/Users/me/Pictures/IMG_0042.HEIC"], DuplicateComparison.Hash),
             new DuplicateSet(3, 18_000, "b6d767d2f8ed5d21a44b0e5886680cb9", ["/Users/me/Documents/Invoices, 2025/March.pdf", "/Users/me/Downloads/March.pdf"], DuplicateComparison.Hash));
-        var window = new DuplicatesWindow { DataContext = results };
+        var window = Host(results);
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal("Duplicates in /Users/me", window.Title);
+        Assert.Equal("Duplicates in /Users/me", results.Header);
+        Assert.Equal(results.Title, results.ToolTip);
         var list = window.GetVisualDescendants().OfType<ListBox>().Single();
         Assert.Equal(7, list.ItemCount);
         var titles = window.GetVisualDescendants().OfType<TextBlock>().Where(static text => text.Classes.Contains("column-title")).Select(static text => text.Text);
@@ -52,7 +53,7 @@ public sealed class DuplicatesWindowTests
         Assert.Equal(["2", "/Users/me/Downloads/IMG_0042.HEIC", "2.40 MB", "3c59dc048e8850243be8079a5c74d079", "Hash"], RowTexts(list, 3));
         Assert.True(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Verify All by Hash").IsEffectivelyEnabled);
         Assert.False(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Stop").IsVisible);
-        Capture(window, $"duplicates-window-{variant.ToLowerInvariant()}.png");
+        Capture(window, $"duplicates-view-{variant.ToLowerInvariant()}.png");
 
         var copy = window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Copy CSV");
         Assert.True(copy.IsEffectivelyEnabled);
@@ -76,7 +77,7 @@ public sealed class DuplicatesWindowTests
             var second = Path.Join(folder.FullName, "b.bin");
             File.WriteAllBytes(first, [1]);
             File.WriteAllBytes(second, [1]);
-            var window = new DuplicatesWindow { DataContext = Create(new DuplicateSet(1, 1, "00000000000000000000000000000001", [first, second], DuplicateComparison.Hash)) };
+            var window = Host(Create(new DuplicateSet(1, 1, "00000000000000000000000000000001", [first, second], DuplicateComparison.Hash)));
             window.Show();
             Dispatcher.UIThread.RunJobs();
             var list = window.GetVisualDescendants().OfType<ListBox>().Single();
@@ -117,7 +118,7 @@ public sealed class DuplicatesWindowTests
             File.WriteAllBytes(first, content);
             File.WriteAllBytes(second, content);
             var results = Create(new DuplicateSet(1, 1_200_000, null, [first, second], DuplicateComparison.Samples));
-            var window = new DuplicatesWindow { DataContext = results };
+            var window = Host(results);
             window.Show();
             Dispatcher.UIThread.RunJobs();
             var list = window.GetVisualDescendants().OfType<ListBox>().Single();
@@ -155,7 +156,7 @@ public sealed class DuplicatesWindowTests
     [AvaloniaFact]
     public void Window_WithNoDuplicates_SaysSo()
     {
-        var window = new DuplicatesWindow { DataContext = Create() };
+        var window = Host(Create());
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
@@ -168,23 +169,12 @@ public sealed class DuplicatesWindowTests
     }
 
     /// <summary>
-    /// The dialog service shows the results in a window the main window owns, without waiting for it to close.
+    /// Shows the results view in a window the size the results tab has.
     /// </summary>
-    [AvaloniaFact]
-    public void DialogService_ShowsTheWindowOwnedByTheMainWindow()
-    {
-        var main = new Window();
-        main.Show();
-        var results = Create(new DuplicateSet(1, 10, "00000000000000000000000000000001", ["/a", "/b"], DuplicateComparison.Hash));
-
-        new WindowDialogService(() => main).ShowDuplicates(results);
-
-        var shown = Assert.IsType<DuplicatesWindow>(Assert.Single(main.OwnedWindows));
-        Assert.Same(results, shown.DataContext);
-        Assert.True(shown.IsVisible);
-        shown.Close();
-        main.Close();
-    }
+    /// <param name="results">The results.</param>
+    /// <returns>The window.</returns>
+    private static Window Host(DuplicateResultsViewModel results) =>
+        new() { Width = 1140, Height = 640, Content = new DuplicatesView { DataContext = results } };
 
     /// <summary>
     /// Creates the view model for some sets.

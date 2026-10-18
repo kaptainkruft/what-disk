@@ -3,7 +3,7 @@ using WhatDisk.FileOperations;
 namespace WhatDisk.ViewModels;
 
 /// <summary>
-/// Asks the user questions, and shows windows of results, on behalf of the view models.
+/// Asks the user questions on behalf of the view models.
 /// </summary>
 public interface IDialogService
 {
@@ -22,16 +22,14 @@ public interface IDialogService
     Task<ConflictDecision> ResolveConflictAsync(TransferConflict conflict);
 
     /// <summary>
-    /// Shows the results of a duplicate search in a window of their own, without waiting for it to close.
+    /// Gets a value indicating whether a question is being asked.
     /// </summary>
-    /// <param name="results">The results.</param>
-    void ShowDuplicates(DuplicateResultsViewModel results);
+    bool IsShowing { get; }
 
     /// <summary>
-    /// Shows the settings window, or brings it to the front when it is already open.
+    /// Raised when a question starts or stops being asked.
     /// </summary>
-    /// <param name="settings">The settings window's view model, used when the window is not already open.</param>
-    void ShowSettings(SettingsViewModel settings);
+    event EventHandler? IsShowingChanged;
 }
 
 /// <summary>
@@ -44,8 +42,8 @@ public interface IDialogService
 public sealed record ConfirmationRequest(string Title, string Message, string ConfirmText, bool IsDestructive);
 
 /// <summary>
-/// A dialog service that declines every confirmation, skips every conflict and shows nothing, so that nothing
-/// destructive happens when no user interface is attached.
+/// A dialog service that declines every confirmation and skips every conflict, so that nothing destructive happens
+/// when no user interface is attached.
 /// </summary>
 public sealed class DecliningDialogService : IDialogService
 {
@@ -56,12 +54,12 @@ public sealed class DecliningDialogService : IDialogService
     public Task<ConflictDecision> ResolveConflictAsync(TransferConflict conflict) => Task.FromResult(new ConflictDecision(ConflictResolution.Skip));
 
     /// <inheritdoc/>
-    public void ShowDuplicates(DuplicateResultsViewModel results)
-    {
-    }
+    public bool IsShowing => false;
 
     /// <inheritdoc/>
-    public void ShowSettings(SettingsViewModel settings)
+    public event EventHandler? IsShowingChanged
     {
+        add { }
+        remove { }
     }
 }

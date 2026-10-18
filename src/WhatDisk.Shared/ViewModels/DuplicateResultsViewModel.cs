@@ -10,12 +10,15 @@ using WhatDisk.Platform;
 namespace WhatDisk.ViewModels;
 
 /// <summary>
-/// The results of a duplicate search, for the Duplicates window: one row per file, grouped by set, with a summary,
+/// The results of a duplicate search, shown in a tab of their own: one row per file, grouped by set, with a summary,
 /// the same CSV for copying to the clipboard and exporting to a file, a way to show a file in the file manager, and
 /// commands that confirm sets matched by samples by hashing their files.
 /// </summary>
-public sealed partial class DuplicateResultsViewModel : ObservableObject
+public sealed partial class DuplicateResultsViewModel : TabViewModel
 {
+    /// <summary>The tab's title.</summary>
+    private readonly string _header;
+
     /// <summary>The most failures listed in the tooltip.</summary>
     private const int ListedFailures = 20;
 
@@ -53,6 +56,7 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
     /// <param name="finder">Hashes the files of sampled sets.</param>
     /// <param name="fileManagerName">The file manager's name, such as "Finder" or "File Explorer".</param>
     /// <param name="foundAt">When the search finished, in local time, for the suggested file name.</param>
+    /// <param name="shortScope">What was searched, briefly, for the tab's title, such as a folder's name; <see langword="null"/> uses <paramref name="scope"/>.</param>
     public DuplicateResultsViewModel(
         DuplicateSearchResult result,
         string scope,
@@ -60,7 +64,8 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
         IShellService shell,
         DuplicateFinder finder,
         string fileManagerName,
-        DateTimeOffset foundAt)
+        DateTimeOffset foundAt,
+        string? shortScope = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(sizes);
@@ -76,6 +81,7 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
         _failures = [.. result.Failures];
         _nextSetId = _sets.Count == 0 ? 1 : _sets.Max(static set => set.Id) + 1;
         Title = $"Duplicates in {scope}";
+        _header = $"Duplicates in {shortScope ?? scope}";
         Rows = [.. _sets.SelectMany(CreateRows)];
         SuggestedFileName = $"WhatDisk Duplicates {foundAt.ToString("yyyy-MM-dd HHmm", CultureInfo.InvariantCulture)}.csv";
         Details = DescribeSearch(result, finder.Options);
@@ -98,9 +104,15 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
     public IReadOnlyList<DuplicateSet> Sets => _sets;
 
     /// <summary>
-    /// Gets the window title.
+    /// Gets what was searched, in full, as the tab's tooltip.
     /// </summary>
     public string Title { get; }
+
+    /// <inheritdoc/>
+    public override string Header => _header;
+
+    /// <inheritdoc/>
+    public override string? ToolTip => Title;
 
     /// <summary>
     /// Gets one row per duplicate file, in set order.
@@ -275,6 +287,17 @@ public sealed partial class DuplicateResultsViewModel : ObservableObject
 
         var text = $"Hashed {DisplayFormat.Quantity(sets.Count, "set", "sets")}: {DisplayFormat.Count(confirmed)} confirmed";
         return outcomes.Count == 0 ? $"{text}." : $"{text}; {string.Join("; ", outcomes.Select(static outcome => $"set {outcome.SetId} {outcome.Text}"))}.";
+    }
+
+    /// <summary>
+    /// Stops any hashing when the tab is closed; sets already hashed keep their results.
+    /// </summary>
+    public override void OnClosed()
+    {
+        if (StopVerifyingCommand.CanExecute(null))
+        {
+            StopVerifyingCommand.Execute(null);
+        }
     }
 
     /// <summary>

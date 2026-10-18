@@ -124,32 +124,34 @@ public sealed class SettingsAppliedTests : IDisposable
         _settings.Set(SettingsCatalog.Duplicates.SampleSizeKiB, 1);
         var viewModel = await ScanAsync();
 
-        await viewModel.FindDuplicatesCommand.ExecuteAsync(null);
+        await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        var sampled = Assert.Single(_dialogs.DuplicateResults);
+        var sampled = Assert.Single(viewModel.DuplicateTabs());
         Assert.Equal(DuplicateComparison.Samples, Assert.Single(sampled.Sets).Comparison);
         Assert.Contains("compared by 8 samples of 1 KiB", sampled.Details, StringComparison.Ordinal);
 
         _settings.Set(SettingsCatalog.Duplicates.VerifyAutomatically, true);
-        await viewModel.FindDuplicatesCommand.ExecuteAsync(null);
+        await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        var verified = _dialogs.DuplicateResults[1];
+        var verified = viewModel.DuplicateTabs()[1];
         Assert.Equal(DuplicateComparison.Hash, Assert.Single(verified.Sets).Comparison);
         Assert.Equal("Every set is confirmed by hash.", verified.VerificationSummary);
     }
 
     /// <summary>
-    /// Settings opens the settings window with these settings.
+    /// Settings opens a tab with these settings, and shows it.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
-    public async Task OpenSettings_ShowsTheSettingsWindow()
+    public async Task OpenSettings_ShowsTheSettingsTab()
     {
         var viewModel = await ScanAsync();
 
         viewModel.OpenSettingsCommand.Execute(null);
 
-        Assert.Same(_settings, Assert.Single(_dialogs.SettingsShown).Settings);
+        var settings = Assert.Single(viewModel.Tabs.OfType<SettingsViewModel>());
+        Assert.Same(_settings, settings.Settings);
+        Assert.Same(settings, viewModel.SelectedTab);
     }
 
     /// <summary>

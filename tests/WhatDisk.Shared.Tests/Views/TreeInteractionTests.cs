@@ -135,6 +135,68 @@ public sealed class TreeInteractionTests : IDisposable
     }
 
     /// <summary>
+    /// Find Duplicates in Selection (⌘D, Ctrl+D) compares the selected folders as one set, so copies between them are
+    /// found; with one folder selected, a copy outside it is not. Each search's results open in a new tab, and going
+    /// back to the Scan tab gives the tree focus again.
+    /// </summary>
+    /// <param name="platformName">The conventions to follow.</param>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaTheory]
+    [InlineData("macOS")]
+    [InlineData("Windows")]
+    public async Task FindDuplicatesInSelection_ComparesTheSelectedFolders(string platformName)
+    {
+        Write("b/movie.bin", 5000);
+        Write("d/movie copy.bin", 5000);
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
+        var keys = viewModel.Platform.Shortcuts;
+
+        Focus(window, Row(viewModel, "b"));
+        Press(window, keys.FindDuplicatesInSelection);
+        await Eventually.True(() => viewModel.DuplicateTabs().Count == 1 && !viewModel.IsOperationRunning, "the search of b has finished");
+        Assert.Empty(viewModel.DuplicateTabs()[0].Sets);
+        Assert.Equal($"Duplicates in {PathOf("b")}", viewModel.DuplicateTabs()[0].Title);
+        Assert.Same(viewModel.DuplicateTabs()[0], viewModel.SelectedTab);
+        Assert.False(viewModel.IsTreeActive);
+
+        // The results opened in their own tab; back on the Scan tab, the tree has focus again.
+        viewModel.SelectedTab = viewModel.ScanTab;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewModel.IsTreeActive);
+        viewModel.Selection.Select(viewModel.Tree.IndexOf(viewModel.Tree.Rows.Single(static row => row.Name == "d")));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(2, viewModel.Selection.Count);
+        Press(window, keys.FindDuplicatesInSelection);
+        await Eventually.True(() => viewModel.DuplicateTabs().Count == 2 && !viewModel.IsOperationRunning, "the search of b and d has finished");
+
+        var results = viewModel.DuplicateTabs()[1];
+        Assert.Equal([PathOf("b/movie.bin"), PathOf("d/movie copy.bin")], Assert.Single(results.Sets).Paths);
+        Assert.Contains(" and ", results.Title, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Find Duplicates in Selection is disabled for a single file, which cannot hold duplicates on its own; Find
+    /// Duplicates in Scanned Files searches everything, and on Windows its shortcut (Ctrl+Shift+D) works from
+    /// anywhere in the window.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task FindDuplicatesInScannedFiles_SearchesEverything()
+    {
+        Write("b/movie.bin", 5000);
+        Write("d/movie copy.bin", 5000);
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Windows);
+        Focus(window, Row(viewModel, "a.txt"));
+        Assert.False(viewModel.FindDuplicatesInSelectionCommand.CanExecute(null));
+
+        window.GetVisualDescendants().OfType<TextBox>().Single().Focus();
+        Press(window, viewModel.Platform.Shortcuts.FindDuplicatesInScan);
+        await Eventually.True(() => viewModel.DuplicateTabs().Count == 1 && !viewModel.IsOperationRunning, "the search has finished");
+
+        Assert.Equal([PathOf("b/movie.bin"), PathOf("d/movie copy.bin")], Assert.Single(viewModel.DuplicateTabs()[0].Sets).Paths);
+    }
+
+    /// <summary>
     /// The permanent-delete and rescan shortcuts work too: Shift+Delete and F5 on Windows, ⌥⌘⌫ and ⇧⌘R on macOS.
     /// </summary>
     /// <param name="platformName">The conventions to follow.</param>
@@ -228,8 +290,8 @@ public sealed class TreeInteractionTests : IDisposable
         Assert.True(menu.IsOpen);
         var headers = menu.Items.OfType<MenuItem>().Where(static item => item.IsVisible).Select(static item => item.Header as string).ToList();
         string[] expected = platformName == "macOS"
-            ? ["Open", "Open With", "Show in Finder", "Quick Look", "Get Info", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Move to Trash", "Delete Immediately\u2026"]
-            : ["Open", "Open With", "Show in File Explorer", "Properties", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Move to Recycle Bin", "Delete Permanently\u2026"];
+            ? ["Open", "Open With", "Show in Finder", "Quick Look", "Get Info", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Find Duplicates in Selection", "Move to Trash", "Delete Immediately\u2026"]
+            : ["Open", "Open With", "Show in File Explorer", "Properties", "Copy", "Copy Path", "Expand All Beneath", "Collapse All Beneath", "Rescan", "Find Duplicates in Selection", "Move to Recycle Bin", "Delete Permanently\u2026"];
         Assert.Equal(expected, headers);
         var openWith = menu.Items.OfType<MenuItem>().Single(static item => item.Header as string == "Open With");
         Assert.Equal(["Preview (default)", "TextEdit"], openWith.Items.OfType<MenuItem>().Select(static item => item.Header as string));
@@ -243,9 +305,11 @@ public sealed class TreeInteractionTests : IDisposable
     }
 
     /// <summary>
-    /// The menu bar has File, Edit and View menus in the platform's words with its shortcuts, and a Tools menu with
-    /// Find Duplicates, enabled after the scan. Without an application menu (Windows) it is drawn in the window, its
-    /// titles have access keys, Help holds About, File holds Exit, and Tools holds Settings (Ctrl+,).
+    /// The window's menus are declared once, as Avalonia's documentation describes, and the same on every platform:
+    /// File, Edit, View and Tools in the platform's words with its shortcuts (Find Duplicates enabled after the scan),
+    /// and nothing changes them afterwards. Items for one platform are hidden on the other: Exit, Settings in Tools and
+    /// the Help menu only where the menus are drawn in the window (Windows), Quick Look only on macOS. macOS drops the
+    /// access key markers itself. Where the menus are drawn in the window, macOS calls Exit "Quit WhatDisk" (⌘Q).
     /// </summary>
     /// <param name="platformName">The conventions to follow.</param>
     /// <returns>A task that completes when the test has finished.</returns>
@@ -256,40 +320,69 @@ public sealed class TreeInteractionTests : IDisposable
     {
         var (window, viewModel) = await ShowAsync(TestPlatforms.Named(platformName));
         var platform = viewModel.Platform;
-
         var bar = Assert.IsType<NativeMenu>(NativeMenu.GetMenu(window));
-        var titles = bar.Items.OfType<NativeMenuItem>().Select(static item => item.Header).ToList();
-        var file = bar.Items.OfType<NativeMenuItem>().First().Menu!.Items
-            .Where(static item => item is not NativeMenuItemSeparator)
-            .OfType<NativeMenuItem>()
-            .ToDictionary(static item => item.Header!, StringComparer.Ordinal);
 
-        Assert.Equal(platform.HasApplicationMenu ? ["File", "Edit", "View", "Tools"] : ["_File", "_Edit", "_View", "_Tools", "_Help"], titles);
-        var tools = bar.Items.OfType<NativeMenuItem>().Single(static item => item.Header!.EndsWith("Tools", StringComparison.Ordinal)).Menu!.Items
-            .Where(static item => item is not NativeMenuItemSeparator)
-            .OfType<NativeMenuItem>()
-            .ToList();
-        Assert.Equal(platform.HasApplicationMenu ? ["Find Duplicates"] : ["Find Duplicates", "Settings\u2026"], tools.Select(static item => item.Header));
-        Assert.Same(viewModel.FindDuplicatesCommand, tools[0].Command);
-        Assert.True(viewModel.FindDuplicatesCommand.CanExecute(null));
-        if (!platform.HasApplicationMenu)
-        {
-            // macOS has Settings in the application menu instead.
-            Assert.Same(viewModel.OpenSettingsCommand, tools[1].Command);
-            Assert.Equal(platform.Shortcuts.Settings, tools[1].Gesture);
-        }
+        Assert.Equal(platform.HasApplicationMenu ? ["_File", "_Edit", "_View", "_Tools"] : ["_File", "_Edit", "_View", "_Tools", "_Help"], Visible(bar));
+        var file = Items(bar, "_File");
+        var tools = Items(bar, "_Tools");
+        string[] expectedTools = ["Find Duplicates in Scanned Files", "Find Duplicates in Selection"];
+        Assert.Equal(platform.HasApplicationMenu ? expectedTools : [.. expectedTools, "Settings\u2026"], Visible(Menu(bar, "_Tools")));
+        Assert.Same(viewModel.FindDuplicatesInScanCommand, tools["Find Duplicates in Scanned Files"].Command);
+        Assert.Equal(platform.Shortcuts.FindDuplicatesInScan, tools["Find Duplicates in Scanned Files"].Gesture);
+        Assert.Same(viewModel.FindDuplicatesInSelectionCommand, tools["Find Duplicates in Selection"].Command);
+        Assert.Equal(platform.Shortcuts.FindDuplicatesInSelection, tools["Find Duplicates in Selection"].Gesture);
+        Assert.Equal(platform.Shortcuts.Settings, tools["Settings\u2026"].Gesture);
+        Assert.True(viewModel.FindDuplicatesInScanCommand.CanExecute(null));
         Assert.Equal(platform.Shortcuts.Reveal, file[$"Show in {platform.FileManagerName}"].Gesture);
         Assert.Equal(platform.Shortcuts.GetInfo, file[platform.InfoCommandName].Gesture);
         Assert.Equal(platform.Shortcuts.MoveToTrash, file[$"Move to {platform.TrashName}"].Gesture);
         Assert.Equal(platform.Shortcuts.DeletePermanently, file[$"{platform.PermanentDeleteName}\u2026"].Gesture);
         Assert.Equal(platform.Shortcuts.Rescan, file["Rescan"].Gesture);
-        Assert.Equal(!platform.HasApplicationMenu, file.ContainsKey("E_xit"));
-        Assert.Equal(platformName == "macOS", file.ContainsKey("Quick Look"));
+        Assert.Equal(platform.Shortcuts.CloseTab, file["Close Tab"].Gesture);
+        var exit = file[platformName == "macOS" ? "Quit WhatDisk" : "E_xit"];
+        Assert.Equal(!platform.HasApplicationMenu, exit.IsVisible);
+        Assert.Equal(platform.Shortcuts.Quit, exit.Gesture);
+        Assert.Equal(platformName == "macOS", file["Quick Look"].IsVisible);
+        Assert.DoesNotContain("Open With", file.Keys);
 
         // Headless windows have no native menu bar, so the menus are drawn in the window, as on Windows.
         var inWindow = window.GetVisualDescendants().OfType<NativeMenuBar>().Single();
         Assert.True(inWindow.IsEffectivelyVisible);
-        Assert.Contains(window.GetVisualDescendants().OfType<MenuItem>(), item => item.Header as string == titles[0]);
+        Assert.Contains(window.GetVisualDescendants().OfType<MenuItem>(), static item => item.Header as string == "_File");
+
+        static NativeMenu Menu(NativeMenu bar, string title) =>
+            bar.Items.OfType<NativeMenuItem>().Single(item => item.Header == title).Menu!;
+
+        static Dictionary<string, NativeMenuItem> Items(NativeMenu bar, string title) =>
+            Menu(bar, title).Items.Where(static item => item is not NativeMenuItemSeparator).OfType<NativeMenuItem>().ToDictionary(static item => item.Header!, StringComparer.Ordinal);
+
+        static List<string?> Visible(NativeMenu menu) =>
+            [.. menu.Items.Where(static item => item is not NativeMenuItemSeparator).OfType<NativeMenuItem>().Where(static item => item.IsVisible).Select(static item => item.Header)];
+    }
+
+    /// <summary>
+    /// With the macOS menu bar turned off, the window draws the menus with Quit WhatDisk (⌘Q), Settings and Help in
+    /// them, as on Windows, and ⌘Q quits.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task MenuBar_InTheWindowOnMacOS()
+    {
+        var (window, _) = await ShowAsync(TestPlatforms.MacOS with { HasApplicationMenu = false });
+        var bar = Assert.IsType<NativeMenu>(NativeMenu.GetMenu(window));
+        var file = bar.Items.OfType<NativeMenuItem>().First().Menu!.Items.OfType<NativeMenuItem>().ToList();
+
+        Assert.Equal(["_File", "_Edit", "_View", "_Tools", "_Help"], bar.Items.OfType<NativeMenuItem>().Where(static item => item.IsVisible).Select(static item => item.Header));
+        var quit = file.Single(static item => item.Header == "Quit WhatDisk");
+        Assert.True(quit.IsVisible);
+        Assert.Equal(ShortcutScheme.MacOS.Quit, quit.Gesture);
+        Assert.True(bar.Items.OfType<NativeMenuItem>().Single(static item => item.Header == "_Tools").Menu!.Items.OfType<NativeMenuItem>().Single(static item => item.Header == "Settings\u2026").IsVisible);
+
+        // The window closes on the key press, so no key release follows.
+        window.KeyPress(Key.Q, RawInputModifiers.Meta, PhysicalKey.None, null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(window.IsVisible);
     }
 
     /// <summary>

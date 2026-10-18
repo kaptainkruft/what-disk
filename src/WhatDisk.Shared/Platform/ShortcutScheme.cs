@@ -29,6 +29,10 @@ public sealed record ShortcutScheme
         CollapseAll = new KeyGesture(Key.Left, KeyModifiers.Alt),
         Rescan = new KeyGesture(Key.R, KeyModifiers.Meta | KeyModifiers.Shift),
         Settings = new KeyGesture(Key.OemComma, KeyModifiers.Meta),
+        FindDuplicatesInScan = new KeyGesture(Key.D, KeyModifiers.Meta | KeyModifiers.Shift),
+        FindDuplicatesInSelection = new KeyGesture(Key.D, KeyModifiers.Meta),
+        CloseTab = new KeyGesture(Key.W, KeyModifiers.Meta),
+        Quit = new KeyGesture(Key.Q, KeyModifiers.Meta),
         MoveToTrash = new KeyGesture(Key.Back, KeyModifiers.Meta),
         DeletePermanently = new KeyGesture(Key.Back, KeyModifiers.Meta | KeyModifiers.Alt),
     };
@@ -56,6 +60,9 @@ public sealed record ShortcutScheme
         CollapseAll = new KeyGesture(Key.Left, KeyModifiers.Alt),
         Rescan = new KeyGesture(Key.F5),
         Settings = new KeyGesture(Key.OemComma, KeyModifiers.Control),
+        FindDuplicatesInScan = new KeyGesture(Key.D, KeyModifiers.Control | KeyModifiers.Shift),
+        FindDuplicatesInSelection = new KeyGesture(Key.D, KeyModifiers.Control),
+        CloseTab = new KeyGesture(Key.W, KeyModifiers.Control),
         MoveToTrash = new KeyGesture(Key.Delete),
         DeletePermanently = new KeyGesture(Key.Delete, KeyModifiers.Shift),
     };
@@ -130,4 +137,26 @@ public sealed record ShortcutScheme
     /// Gets the key that opens the settings window: ⌘, on macOS, Ctrl+, on Windows.
     /// </summary>
     public required KeyGesture Settings { get; init; }
+
+    /// <summary>
+    /// Gets the key that finds duplicates among every scanned file: ⇧⌘D on macOS, Ctrl+Shift+D on Windows.
+    /// </summary>
+    public required KeyGesture FindDuplicatesInScan { get; init; }
+
+    /// <summary>
+    /// Gets the key that finds duplicates among the selected items: ⌘D on macOS, Ctrl+D on Windows.
+    /// </summary>
+    public required KeyGesture FindDuplicatesInSelection { get; init; }
+
+    /// <summary>
+    /// Gets the key that closes the tab shown (not the Scan tab): ⌘W on macOS, Ctrl+W on Windows.
+    /// </summary>
+    public required KeyGesture CloseTab { get; init; }
+
+    /// <summary>
+    /// Gets the key that quits, where the app handles it itself (⌘Q on macOS when its menus are drawn in the window,
+    /// since the system menu bar's Quit is not there), or <see langword="null"/> where the system handles it (Alt+F4 on
+    /// Windows).
+    /// </summary>
+    public KeyGesture? Quit { get; init; }
 }

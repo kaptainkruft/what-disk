@@ -79,21 +79,49 @@ public sealed class FindDuplicatesTests : IDisposable
     [AvaloniaFact]
     public async Task FindDuplicates_AfterAScan_ShowsTheResults()
     {
-        Assert.False(_viewModel.FindDuplicatesCommand.CanExecute(null));
+        Assert.False(_viewModel.FindDuplicatesInScanCommand.CanExecute(null));
         await _viewModel.StartScanCommand.ExecuteAsync(null);
         _viewModel.IsTreeActive = false;
-        Assert.True(_viewModel.FindDuplicatesCommand.CanExecute(null));
+        Assert.True(_viewModel.FindDuplicatesInScanCommand.CanExecute(null));
 
-        await _viewModel.FindDuplicatesCommand.ExecuteAsync(null);
+        await _viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        var results = Assert.Single(_dialogs.DuplicateResults);
+        var results = Assert.Single(_viewModel.DuplicateTabs());
         var set = Assert.Single(results.Result.Sets);
         Assert.Equal([PathOf("backup/beach copy.jpg"), PathOf("photos/beach.jpg")], set.Paths);
         Assert.Equal(3, results.Result.SizeMatches);
         Assert.Equal($"Duplicates in {_temp.FullName}", results.Title);
         Assert.Equal("Found 1 set of duplicates (2 files, 5.00 KB could be freed)", _viewModel.StatusText);
         Assert.False(_viewModel.IsOperationRunning);
-        Assert.True(_viewModel.FindDuplicatesCommand.CanExecute(null));
+        Assert.True(_viewModel.FindDuplicatesInScanCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// Finding duplicates in a selection compares only the selected items: one folder without the copy finds nothing,
+    /// both folders together find the copy, and the results are titled with what was searched.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task FindDuplicatesInSelection_SearchesOnlyTheSelection()
+    {
+        await _viewModel.StartScanCommand.ExecuteAsync(null);
+        _viewModel.IsTreeActive = true;
+        var root = (DirectoryNode)_viewModel.Tree.RootRows[0].Node;
+        var photos = _viewModel.Tree.FindVisible(root.Children.Single(static child => child.Name == "photos"))!;
+        var backup = _viewModel.Tree.FindVisible(root.Children.Single(static child => child.Name == "backup"))!;
+
+        _viewModel.Selection.Clear();
+        _viewModel.Selection.Select(_viewModel.Tree.IndexOf(photos));
+        await _viewModel.FindDuplicatesInSelectionCommand.ExecuteAsync(null);
+
+        Assert.Empty(_viewModel.DuplicateTabs()[0].Sets);
+        Assert.Equal($"Duplicates in {PathOf("photos")}", _viewModel.DuplicateTabs()[0].Title);
+
+        _viewModel.Selection.Select(_viewModel.Tree.IndexOf(backup));
+        await _viewModel.FindDuplicatesInSelectionCommand.ExecuteAsync(null);
+
+        Assert.Equal([PathOf("backup/beach copy.jpg"), PathOf("photos/beach.jpg")], Assert.Single(_viewModel.DuplicateTabs()[1].Sets).Paths);
+        Assert.Equal(3, _viewModel.DuplicateTabs()[1].Result.SizeMatches);
     }
 
     /// <summary>
@@ -106,9 +134,9 @@ public sealed class FindDuplicatesTests : IDisposable
         File.Delete(PathOf("backup/beach copy.jpg"));
         await _viewModel.StartScanCommand.ExecuteAsync(null);
 
-        await _viewModel.FindDuplicatesCommand.ExecuteAsync(null);
+        await _viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        Assert.Empty(Assert.Single(_dialogs.DuplicateResults).Rows);
+        Assert.Empty(Assert.Single(_viewModel.DuplicateTabs()).Rows);
         Assert.Equal("No duplicates among 3 files", _viewModel.StatusText);
     }
 
@@ -135,7 +163,7 @@ public sealed class FindDuplicatesTests : IDisposable
         Assert.All(controls, static control => Assert.True(control.IsEffectivelyEnabled));
 
         _enumerator.IsGated = true;
-        var search = _viewModel.FindDuplicatesCommand.ExecuteAsync(null);
+        var search = _viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
         Assert.True(await Task.Run(() => _enumerator.Entered.Wait(TimeSpan.FromSeconds(10))), "The search did not start.");
         Dispatcher.UIThread.RunJobs();
 
@@ -151,7 +179,7 @@ public sealed class FindDuplicatesTests : IDisposable
 
         Assert.False(_viewModel.IsFindingDuplicates);
         Assert.All(controls, static control => Assert.True(control.IsEffectivelyEnabled));
-        Assert.Single(_dialogs.DuplicateResults);
+        Assert.Single(_viewModel.DuplicateTabs());
         window.Close();
     }
 

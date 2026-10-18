@@ -41,12 +41,17 @@ public partial class App : Application
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     /// <summary>
-    /// Shows the About window over the main window.
+    /// Shows the About box inside the main window, from the macOS application menu.
     /// </summary>
     /// <param name="sender">The menu item.</param>
     /// <param name="e">Unused.</param>
-    private async void OnAboutClicked(object? sender, EventArgs e) =>
-        await AboutWindow.ShowAsync((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow);
+    private async void OnAboutClicked(object? sender, EventArgs e)
+    {
+        if ((ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow is MainWindow main)
+        {
+            await main.ShowAboutAsync();
+        }
+    }
 
     /// <summary>
     /// Opens the settings window from the macOS application menu.

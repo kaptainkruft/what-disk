@@ -1,12 +1,9 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:WhatDisk.ViewModels"
-        x:Class="WhatDisk.Views.DuplicatesWindow"
-        x:DataType="vm:DuplicateResultsViewModel"
-        Title="{Binding Title}"
-        Width="1140" Height="640"
-        MinWidth="720" MinHeight="320"
-        WindowStartupLocation="CenterOwner">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WhatDisk.ViewModels"
+             x:Class="WhatDisk.Views.DuplicatesView"
+             x:DataType="vm:DuplicateResultsViewModel">
+  <!-- The results of one duplicate search, in a tab of the main window. -->
   <DockPanel>
     <!-- What was found, and how surely -->
     <Border DockPanel.Dock="Top" Classes="toolbar">
@@ -37,7 +34,6 @@
                   ToolTip.Tip="Copy the results to the clipboard as CSV, with a header row" />
           <Button x:Name="ExportButton" Content="Export CSV…"
                   ToolTip.Tip="Save the results as a CSV file, with a header row" />
-          <Button Content="Close" IsCancel="True" MinWidth="72" HorizontalContentAlignment="Center" Click="OnCloseClick" />
         </StackPanel>
         <TextBlock x:Name="MessageText" Text="{Binding Message}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
       </DockPanel>
@@ -82,4 +78,4 @@
                  Text="No two files have the same contents." IsVisible="{Binding !HasRows}" />
     </Grid>
   </DockPanel>
-</Window>
+</UserControl>

@@ -59,12 +59,12 @@ public sealed class AppVersionInfoTests
     }
 
     /// <summary>
-    /// The About window shows the name, version and release time.
+    /// The About box shows the name, version and release time.
     /// </summary>
     [AvaloniaFact]
-    public void AboutWindow_ShowsTheVersion()
+    public void AboutView_ShowsTheVersion()
     {
-        var window = new AboutWindow(AppVersionInfo.Parse("WhatDisk", "0.1.3-alpha+907dc164e1", "2026-10-17T04:12:09Z", "Copyright (c) 2026 kaptainkruft"));
+        var window = new Window { SizeToContent = SizeToContent.WidthAndHeight, Content = new AboutView(AppVersionInfo.Parse("WhatDisk", "0.1.3-alpha+907dc164e1", "2026-10-17T04:12:09Z", "Copyright (c) 2026 kaptainkruft")) };
         window.Show();
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
@@ -73,7 +73,7 @@ public sealed class AppVersionInfoTests
         Assert.Contains("Version 0.1.3-alpha", texts);
         Assert.Contains("Released 2026-10-17 04:12 UTC", texts);
         Assert.Contains("Commit 907dc16", texts);
-        Assert.Equal("About WhatDisk", window.Title);
+        Assert.Contains("WhatDisk", texts);
         if (Environment.GetEnvironmentVariable("WHATDISK_SCREENSHOTS") is { Length: > 0 } directory)
         {
             Directory.CreateDirectory(directory);

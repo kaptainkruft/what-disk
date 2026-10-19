@@ -1,6 +1,6 @@
 ## Testing
 
-`dotnet test` runs 472 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
+`dotnet test` runs 475 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
@@ -14,12 +14,14 @@
   between samples stay in a sampled set until it is verified. The 1 MiB boundary and sample placement are checked, as
   are verification (confirming, trimming and splitting sets, with stable set numbers and rows kept in place), tiny,
   empty, cloud-only, unreadable, changed and missing files, hard links (with real links on macOS and Windows),
-  progress and cancellation, the minimum length, and grouping by size alone. Scoped searches are checked with their
+  progress and cancellation, the minimum length, grouping by size alone, and each length's outcome reported as it
+  finishes, smallest first. Scoped searches are checked with their
   shortcuts: two selected folders find copies between them, one folder alone does not, and the whole scan is
   searched from anywhere in the window. The Duplicates tab is checked on real scans: empty with its commands off
   before a scan, listing files that share a size while a scan runs (on a fake clock) and only when shown, a sampled
-  scan then a full hash scan, a full hash scan straight from sizes, a new scan listing sizes again, and including
-  smaller files only after the question. The size-only Potential duplicate space estimate is checked on built trees (groups, the
+  scan then a full hash scan, a sampled scan updating the tab set by set (smallest first), a stopped sampled scan
+  carrying on without reading compared files again, a full hash scan straight from sizes, a new scan listing sizes
+  again, and including smaller files only after the question. The size-only Potential duplicate space estimate is checked on built trees (groups, the
   space beyond one copy, what is left out, scope and cache invalidation) and on a real scan (selection, the minimum
   length setting and deletes). Other tests cover the CSV quoting and the results tab, including a real
   right-click on a row to verify its set, and that Copy and Export give the same CSV.

@@ -179,9 +179,15 @@ The **Duplicates** tab covers the whole scan and follows it through three stages
   of thousands of rows; it is not a setting.
 - **Compared.** **Sampled Scan** (also Tools › Find Duplicates in Scanned Files, ⇧⌘D on macOS, Ctrl+Shift+D on
   Windows, which shows the tab first) runs steps 1 to 3 on the same files. **Full Hash Scan** hashes every file of
-  every set not yet confirmed by hash, size-only or sampled. Both are enabled once the scan has finished (or was
-  stopped). The tab then keeps the result until the next scan, a new small file limit, or including or leaving out the
-  smaller files, any of which lists the files that share a size again.
+  every set not yet confirmed by hash, size-only or sampled. Both work through the sets smallest files first and
+  update the tab as each set is done: a sampled scan replaces each length's size-only set with what comparing its
+  files found (`DuplicateGroupOutcome`, reported by the finder as each length finishes), then shows the final result,
+  numbered by waste, keeping the rows already shown. Both are enabled once the scan has finished (or was stopped).
+  Stopping keeps what was compared so far, and starting again never reads a set again at the same level or a lower
+  one: a sampled scan compares only the sets that still just share a size, and a full hash scan only the sets not
+  yet confirmed by hash. When no set just shares a size, Sampled Scan is disabled. The tab keeps its result until
+  the next scan, a new small file limit, or including or leaving out the smaller files, any of which lists the files
+  that share a size again.
 
 **Find Duplicates in Selection** (⌘D, Ctrl+D; also in the context menu) compares every non-empty file of the selected
 items, keeping only the topmost of nested ones, and opens the results in a new tab titled with the scope. It is
@@ -189,7 +195,7 @@ enabled when the selection could hold duplicates: a folder, or more than one ite
 finds copies between them as well as within each; the finder itself only sees one list of files. A sampled scan or a
 search of the selection runs as a file operation, so the status bar shows its progress and Stop cancels it. While it
 runs, the volume picker, path box, Browse and Scan are disabled, because a new scan would replace the tree being
-searched. A search reads as little as it can:
+searched. A search reads as little as it can, and compares the lengths smallest first:
 
 1. **Length.** The scanned regular files are grouped by length from the scan tree alone. Only lengths shared by two or
    more files go further, which usually leaves a small part of the scan. Empty files, files no longer than the
@@ -207,7 +213,7 @@ searched. A search reads as little as it can:
 Sampling is much cheaper, but it is not proof. Measured on real folders, about 0.3% of the files that 64 × 4 KiB
 samples matched were not identical: mostly signed binaries that differ only in their code signature. So the
 results tab says how many sets are only sampled (or only share a size) and asks for a full hash scan before anything
-is deleted. **Full Hash Scan** hashes every set not confirmed by hash, largest waste first, and a row's context menu
+is deleted. **Full Hash Scan** hashes every set not confirmed by hash, smallest files first, and a row's context menu
 has **Verify Set by Hash** for its set alone. Hashing confirms a set (its rows switch to Hash and show the hash, keeping the selection),
 drops the files that differ, or splits the set when it held two contents. The largest group keeps the set's number
 and the others get new numbers and follow it, so numbers already noted stay valid. Stop (or closing the tab) ends

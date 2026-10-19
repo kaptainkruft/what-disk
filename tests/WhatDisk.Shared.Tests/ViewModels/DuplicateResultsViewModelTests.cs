@@ -233,7 +233,8 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
         Assert.Equal([2, 2, 2, 4, 4, 3, 3], results.Rows.Select(static row => row.SetId));
         Assert.Equal([PathOf("y1"), PathOf("y2"), PathOf("y3"), PathOf("x1"), PathOf("x2")], results.Rows.Take(5).Select(static row => row.Path));
         Assert.Equal([false, false, false, true, true, false, false], results.Rows.Select(static row => row.IsAlternate));
-        Assert.Equal("Hashed 2 sets: 0 confirmed; set 1 had no identical files and was removed; set 2 split into sets 2 and 4.", results.Message);
+        // The smaller files' set is hashed first.
+        Assert.Equal("Hashed 2 sets: 0 confirmed; set 2 split into sets 2 and 4; set 1 had no identical files and was removed.", results.Message);
     }
 
     /// <summary>

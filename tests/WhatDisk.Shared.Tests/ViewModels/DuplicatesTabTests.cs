@@ -28,6 +28,9 @@ public sealed class DuplicatesTabTests : IDisposable
     /// <summary>Answers the questions.</summary>
     private readonly ScriptedDialogService _dialogs = new();
 
+    /// <summary>Reads the directories, records identity lookups, and can hold them.</summary>
+    private readonly RecordingEnumerator _enumerator = new();
+
     /// <summary>The view model.</summary>
     private readonly MainWindowViewModel _viewModel;
 
@@ -46,13 +49,14 @@ public sealed class DuplicatesTabTests : IDisposable
         Write("notes/a copy.txt", Content(3, 5000));
         Write("readme.txt", Content(4, 10));
         _viewModel = new MainWindowViewModel(
-            new DiskScanner(new ManagedFileSystemEnumerator(), _volumes, TimeProvider.System),
+            new DiskScanner(_enumerator, _volumes, TimeProvider.System),
             _volumes,
             new FakeFolderPicker(),
             PlatformCapabilities.Generic,
             TimeProvider.System,
             shell: new RecordingShellService(),
-            dialogs: _dialogs)
+            dialogs: _dialogs,
+            enumerator: _enumerator)
         {
             PathText = _temp.FullName,
         };
@@ -61,7 +65,9 @@ public sealed class DuplicatesTabTests : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        _enumerator.Release.Set();
         _viewModel.Dispose();
+        _enumerator.Dispose();
         _temp.Delete(recursive: true);
     }
 
@@ -157,6 +163,68 @@ public sealed class DuplicatesTabTests : IDisposable
         Assert.Equal(DuplicateComparison.Hash, Assert.Single(tab.Sets).Comparison);
         Assert.Equal("Every set is confirmed by hash.", tab.VerificationSummary);
         Assert.False(tab.FullHashScanCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// A sampled scan updates the tab as it goes, smallest files first: the small files' set is confirmed by hash while
+    /// the large files' set still only shares a size.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task SampledScan_UpdatesTheTabSetBySet()
+    {
+        var tab = await ScanAsync();
+        await tab.ToggleSmallFilesCommand.ExecuteAsync(null);
+        await _viewModel.WaitForDuplicatesAsync();
+        var seen = new List<string>();
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DuplicateResultsViewModel.Summary))
+            {
+                seen.Add(string.Join(", ", tab.Sets.OrderBy(static set => set.Length).Select(static set => $"{set.Length} {set.Comparison}")));
+            }
+        };
+
+        await tab.SampledScanCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            [$"5000 Hash, {LargeLength} Size", $"5000 Hash, {LargeLength} Samples"],
+            seen.Distinct());
+    }
+
+    /// <summary>
+    /// A sampled scan that was stopped keeps what it compared, and starting it again compares only the sets that still
+    /// just share a size: the small files hashed before are not read again. When every set has been compared, there is
+    /// nothing left for a sampled scan to do.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task SampledScan_AfterStop_CarriesOnWhereItStopped()
+    {
+        var tab = await ScanAsync();
+        await tab.ToggleSmallFilesCommand.ExecuteAsync(null);
+        await _viewModel.WaitForDuplicatesAsync();
+        _enumerator.Block = static path => path.EndsWith(".mov", StringComparison.Ordinal);
+
+        var first = tab.SampledScanCommand.ExecuteAsync(null);
+        Assert.True(await Task.Run(() => _enumerator.Entered.Wait(TimeSpan.FromSeconds(10))), "the scan did not reach the large files");
+        await Eventually.True(() => tab.Sets.Any(static set => set is { Length: 5000, Comparison: DuplicateComparison.Hash }), "the small files were compared");
+        tab.StopCommand.Execute(null);
+        _enumerator.Release.Set();
+        await first;
+
+        Assert.Equal([(LargeLength, DuplicateComparison.Size), (5000, DuplicateComparison.Hash)], tab.Sets.Select(static set => (set.Length, set.Comparison)));
+        Assert.False(tab.IsLive);
+        Assert.True(tab.SampledScanCommand.CanExecute(null));
+
+        _enumerator.Block = null;
+        _enumerator.Identified.Clear();
+        await tab.SampledScanCommand.ExecuteAsync(null);
+
+        Assert.All(_enumerator.Identified, static path => Assert.EndsWith(".mov", path, StringComparison.Ordinal));
+        Assert.Equal([(1, LargeLength, DuplicateComparison.Samples), (2, 5000, DuplicateComparison.Hash)], tab.Sets.Select(static set => (set.Id, (int)set.Length, set.Comparison)));
+        Assert.Equal("Of 6 files, 5 shared a size with another: 2 up to 1 MiB were hashed, and 3 larger ones were compared by 64 samples of 4 KiB.", tab.Details);
+        Assert.False(tab.SampledScanCommand.CanExecute(null));
     }
 
     /// <summary>
@@ -284,5 +352,68 @@ public sealed class DuplicatesTabTests : IDisposable
         var path = PathOf(relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, content);
+    }
+
+    /// <summary>
+    /// Reads directories with the managed enumerator, recording each file whose identity the duplicate finder looks
+    /// up (just before it reads the file), and holding the lookups <see cref="Block"/> picks until released.
+    /// </summary>
+    private sealed class RecordingEnumerator : IFileSystemEnumerator, IDisposable
+    {
+        /// <summary>Reads the directories.</summary>
+        private readonly ManagedFileSystemEnumerator _inner = new();
+
+        /// <summary>
+        /// Gets or sets which lookups wait for <see cref="Release"/>, or <see langword="null"/> for none.
+        /// </summary>
+        public Func<string, bool>? Block { get; set; }
+
+        /// <summary>
+        /// Gets the files whose identity was looked up.
+        /// </summary>
+        public System.Collections.Concurrent.ConcurrentQueue<string> Identified { get; } = new();
+
+        /// <summary>
+        /// Gets the event set when a lookup starts waiting.
+        /// </summary>
+        public ManualResetEventSlim Entered { get; } = new();
+
+        /// <summary>
+        /// Gets the event that lets waiting lookups continue.
+        /// </summary>
+        public ManualResetEventSlim Release { get; } = new();
+
+        /// <inheritdoc/>
+        public string Name => _inner.Name;
+
+        /// <inheritdoc/>
+        public FileIdentity GetIdentity(string path)
+        {
+            Identified.Enqueue(path);
+            if (Block?.Invoke(path) == true)
+            {
+                Entered.Set();
+                Release.Wait(TimeSpan.FromSeconds(30));
+            }
+
+            return _inner.GetIdentity(path);
+        }
+
+        /// <inheritdoc/>
+        public string GetCanonicalPath(string path) => _inner.GetCanonicalPath(path);
+
+        /// <inheritdoc/>
+        public FileSystemEntryInfo? GetEntry(string path) => ((IFileSystemEnumerator)_inner).GetEntry(path);
+
+        /// <inheritdoc/>
+        public FileIdentity ReadDirectory(string path, ICollection<FileSystemEntryInfo> entries, CancellationToken cancellationToken) =>
+            _inner.ReadDirectory(path, entries, cancellationToken);
+
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            Entered.Dispose();
+            Release.Dispose();
+        }
     }
 }

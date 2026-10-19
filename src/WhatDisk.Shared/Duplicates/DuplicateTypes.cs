@@ -49,6 +49,22 @@ public sealed record DuplicateSet(int Id, long Length, string? Hash, IReadOnlyLi
 }
 
 /// <summary>
+/// Files of one length found to match during a search.
+/// </summary>
+/// <param name="Hash">The contents' XXH128 hash as 32 lower-case hexadecimal digits, or <see langword="null"/> when they were only sampled.</param>
+/// <param name="Paths">The files' paths, sorted; always at least two.</param>
+public sealed record DuplicateMatch(string? Hash, IReadOnlyList<string> Paths);
+
+/// <summary>
+/// What comparing the files of one length found, reported as soon as that length is done, so the files can be shown
+/// as the search goes.
+/// </summary>
+/// <param name="Length">The length of each file.</param>
+/// <param name="Comparison">How the files were compared: <see cref="DuplicateComparison.Hash"/> or <see cref="DuplicateComparison.Samples"/>.</param>
+/// <param name="Matches">The groups of matching files, largest first; none when no two files match.</param>
+public sealed record DuplicateGroupOutcome(long Length, DuplicateComparison Comparison, IReadOnlyList<DuplicateMatch> Matches);
+
+/// <summary>
 /// Files of a sampled set whose hashes turned out equal.
 /// </summary>
 /// <param name="Hash">The contents' XXH128 hash as 32 lower-case hexadecimal digits.</param>

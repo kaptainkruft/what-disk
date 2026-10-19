@@ -452,8 +452,8 @@ public sealed class DuplicateFinderTests : IDisposable
     }
 
     /// <summary>
-    /// Progress is reported for sampling the larger files and then hashing the smaller ones, ending with every file
-    /// and byte hashed.
+    /// Progress is reported for hashing the smaller files (every file and byte) and then sampling the larger ones,
+    /// ending with every file sampled.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [Fact]
@@ -470,9 +470,38 @@ public sealed class DuplicateFinderTests : IDisposable
 
         await new DuplicateFinder().FindAsync(Candidates("large-a", "large-b", "small-a", "small-b", "small-c"), progress, TestContext.Current.CancellationToken);
 
-        Assert.Equal([DuplicateSearchStage.Sampling, DuplicateSearchStage.Hashing], progress.Reports.Select(static report => report.Stage).Distinct());
-        var last = progress.Reports[^1];
-        Assert.Equal(new DuplicateProgress(DuplicateSearchStage.Hashing, 3, 3, 900_000, 900_000), last);
+        Assert.Equal([DuplicateSearchStage.Hashing, DuplicateSearchStage.Sampling], progress.Reports.Select(static report => report.Stage).Distinct());
+        Assert.Contains(new DuplicateProgress(DuplicateSearchStage.Hashing, 3, 3, 900_000, 900_000), progress.Reports);
+        Assert.Equal(new DuplicateProgress(DuplicateSearchStage.Sampling, 2, 2), progress.Reports[^1]);
+    }
+
+    /// <summary>
+    /// Each length's outcome is reported as soon as its files have been compared, smallest length first: the hashed
+    /// lengths, then the sampled ones, including lengths whose files all differ.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [Fact]
+    public async Task Outcomes_AreReportedSmallestFirst()
+    {
+        var large = Content(40, 1_500_000);
+        var medium = Content(41, 300_000);
+        Write("large-a", large);
+        Write("large-b", large);
+        Write("medium-a", medium);
+        Write("medium-b", medium);
+        Write("small-a", Content(42, 100));
+        Write("small-b", Content(43, 100));
+        var outcomes = new RecordingOutcomes();
+        var finder = new DuplicateFinder(options: new DuplicateFinderOptions { Parallelism = 1 });
+
+        var result = await finder.FindAsync(Candidates("large-a", "large-b", "medium-a", "medium-b", "small-a", "small-b"), null, outcomes, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [(100L, DuplicateComparison.Hash, 0), (300_000L, DuplicateComparison.Hash, 1), (1_500_000L, DuplicateComparison.Samples, 1)],
+            outcomes.Reports.Select(static outcome => (outcome.Length, outcome.Comparison, outcome.Matches.Count)));
+        Assert.Equal([PathOf("medium-a"), PathOf("medium-b")], outcomes.Reports[1].Matches[0].Paths);
+        Assert.Equal(result.Sets.Single(static set => set.Length == 300_000).Hash, outcomes.Reports[1].Matches[0].Hash);
+        Assert.Null(outcomes.Reports[2].Matches[0].Hash);
     }
 
     /// <summary>
@@ -568,6 +597,23 @@ public sealed class DuplicateFinderTests : IDisposable
 
         /// <inheritdoc/>
         public void Report(long value) => _reports.Enqueue(value);
+    }
+
+    /// <summary>
+    /// Records the outcomes of lengths as they are reported, on the reporting thread.
+    /// </summary>
+    private sealed class RecordingOutcomes : IProgress<DuplicateGroupOutcome>
+    {
+        /// <summary>The outcomes, in the order reported.</summary>
+        private readonly ConcurrentQueue<DuplicateGroupOutcome> _reports = new();
+
+        /// <summary>
+        /// Gets the outcomes, in the order reported.
+        /// </summary>
+        public DuplicateGroupOutcome[] Reports => [.. _reports];
+
+        /// <inheritdoc/>
+        public void Report(DuplicateGroupOutcome value) => _reports.Enqueue(value);
     }
 
     /// <summary>

@@ -57,6 +57,12 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// <summary>Stops the running verification.</summary>
     private CancellationTokenSource? _verification;
 
+    /// <summary>The files of size-only sets hashed whole by sampled scans since the files were listed.</summary>
+    private int _hashedFiles;
+
+    /// <summary>The files of size-only sets compared by samples by sampled scans since the files were listed.</summary>
+    private int _sampledFiles;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DuplicateResultsViewModel"/> class for the result of a search of
     /// the selection, in a tab of its own.
@@ -177,6 +183,11 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// Gets a value indicating whether any set is not confirmed by hash: it only matched on samples, or only on size.
     /// </summary>
     public bool HasUnconfirmedSets => _sets.Exists(static set => set.Comparison != DuplicateComparison.Hash);
+
+    /// <summary>
+    /// Gets a value indicating whether any set only shares a size, so a sampled scan has something to compare.
+    /// </summary>
+    public bool HasSizeOnlySets => _sets.Exists(static set => set.Comparison == DuplicateComparison.Size);
 
     /// <summary>
     /// Gets how many files each stage of the search compared, and which were left out.
@@ -342,6 +353,8 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
         FailureSummary = null;
         FailureDetails = null;
         Message = null;
+        _hashedFiles = 0;
+        _sampledFiles = 0;
         IsLive = _host is not null;
         UpdateSummary();
     }
@@ -364,38 +377,15 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
             return;
         }
 
-        var existing = new Dictionary<string, DuplicateRowViewModel>(Rows.Count, StringComparer.Ordinal);
-        foreach (var row in Rows)
-        {
-            existing.TryAdd(row.Path, row);
-        }
-
-        var desired = new List<DuplicateRowViewModel>(result.Sets.Sum(static set => set.Paths.Count));
-        foreach (var set in result.Sets)
-        {
-            foreach (var path in set.Paths)
-            {
-                // A row is kept unless its file's size, or the size units, changed.
-                if (existing.TryGetValue(path, out var row) && row.Size == set.Length && row.Comparison == set.Comparison
-                    && row.SizeText == _sizes.Format(set.Length))
-                {
-                    row.SetId = set.Id;
-                    desired.Add(row);
-                }
-                else
-                {
-                    desired.Add(CreateRow(set, path, finder.Options));
-                }
-            }
-        }
-
         _finder = finder;
         Result = result;
         _sets.Clear();
         _sets.AddRange(result.Sets);
         _failures.Clear();
+        _hashedFiles = 0;
+        _sampledFiles = 0;
         _nextSetId = NextSetId();
-        ListReconciler.Apply(Rows, desired);
+        ReconcileRows();
         Title = $"Duplicates in {scope}";
         Details = DescribeSizeMatches(result, finder.Options);
         SuggestedFileName = FileNameFor(listedAt);
@@ -405,7 +395,85 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     }
 
     /// <summary>
-    /// Shows the result of comparing the files' contents, which stays until the tab is cleared.
+    /// Shows the files that share a size as a sampled scan of them starts; the tab stops following the scan, and
+    /// <see cref="ShowOutcome"/> then replaces each length's set as soon as its files have been compared.
+    /// </summary>
+    /// <param name="sizeMatches">The sets of files that share a size, from <see cref="DuplicateFinder.GroupBySize"/>.</param>
+    /// <param name="scope">What the sets cover, such as the scanned folder.</param>
+    /// <param name="finder">The finder that compares them.</param>
+    /// <param name="listedAt">When the files were grouped, in local time, for the suggested file name.</param>
+    public void ShowComparing(DuplicateSearchResult sizeMatches, string scope, DuplicateFinder finder, DateTimeOffset listedAt)
+    {
+        IsLive = true;
+        ShowSizeMatches(sizeMatches, scope, finder, listedAt);
+        IsLive = false;
+    }
+
+    /// <summary>
+    /// Gets the files of the sets that only share a size, which a sampled scan compares; sets already compared by
+    /// samples or hash are left out, so a sampled scan that was stopped carries on where it stopped.
+    /// </summary>
+    /// <returns>The files, with their lengths.</returns>
+    public IReadOnlyList<DuplicateCandidate> GetSizeOnlyFiles() =>
+        [.. _sets.Where(static set => set.Comparison == DuplicateComparison.Size).SelectMany(static set => set.Paths.Select(path => new DuplicateCandidate(path, set.Length)))];
+
+    /// <summary>
+    /// Replaces the set of files of one length with what comparing them found, as a sampled scan goes: the rows of
+    /// matching files stay, and the others leave.
+    /// </summary>
+    /// <param name="outcome">What comparing the files of one length found.</param>
+    public void ShowOutcome(DuplicateGroupOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        if (_sets.Find(set => set.Length == outcome.Length && set.Comparison == DuplicateComparison.Size) is { } set)
+        {
+            Compare(set, outcome.Matches, outcome.Comparison);
+        }
+    }
+
+    /// <summary>
+    /// Finishes a sampled scan of the sets that only shared a size: any whose outcome was not shown yet are replaced
+    /// from the result, failures are added, and the sets are numbered again by the space they waste, keeping the rows
+    /// already shown. The details count every file compared since the files were listed, including by a scan that was
+    /// stopped.
+    /// </summary>
+    /// <param name="result">The result of comparing the files of the size-only sets.</param>
+    /// <param name="finder">The finder that compared them, which hashes sampled sets with the same options.</param>
+    /// <param name="foundAt">When the scan finished, in local time, for the suggested file name.</param>
+    public void FinishComparison(DuplicateSearchResult result, DuplicateFinder finder, DateTimeOffset foundAt)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(finder);
+        _finder = finder;
+        foreach (var set in _sets.Where(static set => set.Comparison == DuplicateComparison.Size).ToList())
+        {
+            var found = result.Sets.Where(found => found.Length == set.Length).ToList();
+            Compare(set, [.. found.Select(static found => new DuplicateMatch(found.Hash, found.Paths))], found.FirstOrDefault()?.Comparison ?? DuplicateComparison.Hash);
+        }
+
+        DuplicateSet[] numbered =
+        [
+            .. _sets
+                .OrderByDescending(static set => set.WastedBytes)
+                .ThenByDescending(static set => set.Length)
+                .ThenBy(static set => set.Paths[0], StringComparer.Ordinal)
+                .Select(static (set, index) => set with { Id = index + 1 }),
+        ];
+        _sets.Clear();
+        _sets.AddRange(numbered);
+        _failures.AddRange(result.Failures);
+        _nextSetId = NextSetId();
+        ReconcileRows();
+        Result = Result with { Sets = numbered, HashedFiles = _hashedFiles, SampledFiles = _sampledFiles, Failures = [.. _failures] };
+        Details = DescribeSearch(Result, finder.Options);
+        SuggestedFileName = FileNameFor(foundAt);
+        UpdateShading();
+        UpdateSummary();
+    }
+
+    /// <summary>
+    /// Shows the result of comparing the files' contents, which stays until the tab is cleared. Rows of files already
+    /// listed the same way are kept, so the selection and scroll position stay.
     /// </summary>
     /// <param name="result">The search's result.</param>
     /// <param name="finder">The finder that compared the files, which hashes sampled sets with the same options.</param>
@@ -424,8 +492,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
         _failures.Clear();
         _failures.AddRange(result.Failures);
         _nextSetId = NextSetId();
-        Rows.Clear();
-        Rows.AddRange([.. _sets.SelectMany(CreateRows)]);
+        ReconcileRows();
         if (scope is not null)
         {
             Title = $"Duplicates in {scope}";
@@ -620,17 +687,21 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// <summary>
     /// Determines whether Sampled Scan is enabled.
     /// </summary>
-    /// <returns><see langword="true"/> for the Duplicates tab once a scan has finished, while nothing else runs.</returns>
-    private bool CanSampledScan() => _host is { CanSearch: true } && !IsBusy;
+    /// <returns>
+    /// <see langword="true"/> for the Duplicates tab once a scan has finished, while nothing else runs, when some set
+    /// still only shares a size (or the tab follows the scan).
+    /// </returns>
+    private bool CanSampledScan() => _host is { CanSearch: true } && !IsBusy && (IsLive || HasSizeOnlySets);
 
     /// <summary>
     /// Hashes the whole of every file of the sets not confirmed by hash yet (those that only matched on size or on
-    /// samples), largest waste first, confirming each set, splitting it, or removing the files that differ. Sets
-    /// already confirmed by hash are not read again.
+    /// samples), smallest files first, confirming each set, splitting it, or removing the files that differ, as soon
+    /// as it is hashed. Sets already confirmed by hash are not read again.
     /// </summary>
     /// <returns>A task that completes when every set has been hashed or the verification was stopped.</returns>
     [RelayCommand(CanExecute = nameof(CanFullHashScan))]
-    private Task FullHashScanAsync() => VerifyAsync([.. _sets.Where(static set => set.Comparison != DuplicateComparison.Hash)]);
+    private Task FullHashScanAsync() =>
+        VerifyAsync([.. _sets.Where(static set => set.Comparison != DuplicateComparison.Hash).OrderBy(static set => set.Length).ThenBy(static set => set.Id)]);
 
     /// <summary>
     /// Determines whether Full Hash Scan is enabled.
@@ -757,7 +828,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
                     throw new OperationCanceledException(cancellation.Token);
                 }
 
-                if (Apply(set, verification) is { } outcome)
+                if (Apply(set, [.. verification.Groups.Select(static group => new DuplicateMatch(group.Hash, group.Paths))], DuplicateComparison.Hash, verification.Failures) is { } outcome)
                 {
                     outcomes.Add((set.Id, outcome));
                 }
@@ -790,23 +861,45 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     }
 
     /// <summary>
-    /// Replaces a set with what hashing found: the same set confirmed by hash, the set without the files that differ,
-    /// several sets when it held more than one kind of contents (the largest keeps the set's number; the others get new
-    /// numbers and follow it), or nothing when no two files are identical.
+    /// Replaces a size-only set with what a sampled scan found in it, counting its files as hashed or sampled.
     /// </summary>
     /// <param name="set">The set.</param>
-    /// <param name="verification">What hashing found.</param>
+    /// <param name="matches">The groups of matching files, largest first.</param>
+    /// <param name="comparison">How they were compared.</param>
+    private void Compare(DuplicateSet set, IReadOnlyList<DuplicateMatch> matches, DuplicateComparison comparison)
+    {
+        if (comparison == DuplicateComparison.Hash)
+        {
+            _hashedFiles += set.Paths.Count;
+        }
+        else
+        {
+            _sampledFiles += set.Paths.Count;
+        }
+
+        Apply(set, matches, comparison, []);
+    }
+
+    /// <summary>
+    /// Replaces a set with what comparing its files found: the same set confirmed, the set without the files that
+    /// differ, several sets when it held more than one kind of contents (the largest keeps the set's number; the others
+    /// get new numbers and follow it), or nothing when no two files match.
+    /// </summary>
+    /// <param name="set">The set.</param>
+    /// <param name="matches">The groups of matching files, largest first.</param>
+    /// <param name="comparison">How they were compared.</param>
+    /// <param name="failures">The files that could not be read.</param>
     /// <returns><see langword="null"/> when every file was confirmed; otherwise what happened to the set, such as "lost 1 file
     /// that differed".</returns>
-    private string? Apply(DuplicateSet set, DuplicateVerification verification)
+    private string? Apply(DuplicateSet set, IReadOnlyList<DuplicateMatch> matches, DuplicateComparison comparison, IReadOnlyList<DuplicateFailure> failures)
     {
         var index = _sets.FindIndex(candidate => candidate.Id == set.Id);
         var firstRow = Rows.IndexOf(Rows.First(row => row.SetId == set.Id));
-        _failures.AddRange(verification.Failures);
+        _failures.AddRange(failures);
         DuplicateSet[] replacements =
         [
-            .. verification.Groups.Select((group, position) =>
-                new DuplicateSet(position == 0 ? set.Id : _nextSetId++, set.Length, group.Hash, group.Paths, DuplicateComparison.Hash)),
+            .. matches.Select((match, position) =>
+                new DuplicateSet(position == 0 ? set.Id : _nextSetId++, set.Length, match.Hash, match.Paths, comparison)),
         ];
         _sets.RemoveAt(index);
         _sets.InsertRange(index, replacements);
@@ -817,7 +910,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
             // Confirmed: the rows stay, so the selection and scroll position do too.
             for (var row = firstRow; row < firstRow + set.Paths.Count; row++)
             {
-                Rows[row].Confirm(whole.Hash!);
+                Rows[row].Record(whole.Hash, comparison);
             }
 
             outcome = null;
@@ -852,6 +945,40 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// </summary>
     /// <returns>One more than the largest set number shown.</returns>
     private int NextSetId() => _sets.Count == 0 ? 1 : _sets.Max(static set => set.Id) + 1;
+
+    /// <summary>
+    /// Makes the rows show the sets, keeping the row of each file already listed the same way (same size, size units,
+    /// comparison and hash) and renumbering it, so the selection and scroll position stay.
+    /// </summary>
+    private void ReconcileRows()
+    {
+        var existing = new Dictionary<string, DuplicateRowViewModel>(Rows.Count, StringComparer.Ordinal);
+        foreach (var row in Rows)
+        {
+            existing.TryAdd(row.Path, row);
+        }
+
+        var desired = new List<DuplicateRowViewModel>(_sets.Sum(static set => set.Paths.Count));
+        foreach (var set in _sets)
+        {
+            var sizeText = _sizes.Format(set.Length);
+            foreach (var path in set.Paths)
+            {
+                if (existing.Remove(path, out var row) && row.Size == set.Length && row.Comparison == set.Comparison
+                    && row.SizeText == sizeText && string.Equals(row.Hash, set.Hash, StringComparison.Ordinal))
+                {
+                    row.SetId = set.Id;
+                    desired.Add(row);
+                }
+                else
+                {
+                    desired.Add(CreateRow(set, path, _finder.Options));
+                }
+            }
+        }
+
+        ListReconciler.Apply(Rows, desired);
+    }
 
     /// <summary>
     /// Creates the rows for a set's files.
@@ -937,6 +1064,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
 
         OnPropertyChanged(nameof(HasRows));
         OnPropertyChanged(nameof(HasUnconfirmedSets));
+        OnPropertyChanged(nameof(HasSizeOnlySets));
         OnPropertyChanged(nameof(CanCopy));
         NotifyCommands();
     }
@@ -1098,12 +1226,13 @@ public sealed partial class DuplicateRowViewModel : ObservableObject
     };
 
     /// <summary>
-    /// Records that hashing confirmed the file.
+    /// Records that comparing the file's contents matched it with the others in its set.
     /// </summary>
-    /// <param name="hash">The hash of its contents.</param>
-    internal void Confirm(string hash)
+    /// <param name="hash">The hash of its contents, or <see langword="null"/> when it was only sampled.</param>
+    /// <param name="comparison">How it was compared.</param>
+    internal void Record(string? hash, DuplicateComparison comparison)
     {
         Hash = hash;
-        Comparison = DuplicateComparison.Hash;
+        Comparison = comparison;
     }
 }

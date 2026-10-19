@@ -159,16 +159,22 @@ public sealed partial class MainWindowViewModel : IDuplicateSearchHost
     }
 
     /// <summary>
-    /// Compares the files of the whole scan that share a size and shows the result in the Duplicates tab.
+    /// Compares the files of the whole scan that share a size and shows the result in the Duplicates tab. Sets already
+    /// compared, by samples or by hash, are not compared again, so a scan that was stopped carries on where it stopped;
+    /// when every set has been compared there is nothing to do.
     /// </summary>
     /// <returns>A task that completes when the search has finished or was stopped.</returns>
     private Task SampledScanAsync() =>
-        _session is { } session ? FindDuplicatesAsync([.. session.Roots], DescribeScanScope(session), null, DuplicatesTab) : Task.CompletedTask;
+        _session is { } session && (DuplicatesTab.IsLive || DuplicatesTab.HasSizeOnlySets)
+            ? FindDuplicatesAsync([.. session.Roots], DescribeScanScope(session), null, DuplicatesTab)
+            : Task.CompletedTask;
 
     /// <summary>
     /// Finds the files with identical contents within a scope (smaller files by hash, larger ones by samples, as the
-    /// settings choose), showing progress in the status bar (Stop cancels), then shows the results in the Duplicates
-    /// tab or a new tab, where sets matched by samples can be confirmed by hash, at once when the settings say so.
+    /// settings choose; the smallest first), showing progress in the status bar (Stop cancels), then shows the results
+    /// in the Duplicates tab or a new tab, where sets matched by samples can be confirmed by hash, at once when the
+    /// settings say so. The Duplicates tab first lists the files that share a size, then replaces each length's set as
+    /// soon as its files have been compared.
     /// </summary>
     /// <param name="scope">The folders and files whose files are compared, as one set.</param>
     /// <param name="scopeName">What the scope is, in full, such as a folder's path.</param>
@@ -211,8 +217,8 @@ public sealed partial class MainWindowViewModel : IDuplicateSearchHost
 
         if (result is null)
         {
-            // Stopped: the Duplicates tab still lists the files that share a size.
-            UpdateDuplicates();
+            // Stopped: the Duplicates tab keeps what was compared so far; a Full Hash Scan or another Sampled Scan
+            // finishes the rest.
             return;
         }
 
@@ -221,11 +227,6 @@ public sealed partial class MainWindowViewModel : IDuplicateSearchHost
         {
             results = new DuplicateResultsViewModel(result, scopeName, _sizes, _shell, finder, Platform.FileManagerName, _timeProvider.GetLocalNow(), shortName);
             OpenTab(results);
-        }
-        else
-        {
-            _duplicatesGeneration++;
-            results.ShowResult(result, finder, _timeProvider.GetLocalNow(), scopeName);
         }
 
         if (Settings.Get(SettingsCatalog.Duplicates.VerifyAutomatically) && results.FullHashScanCommand.CanExecute(null))
@@ -245,16 +246,46 @@ public sealed partial class MainWindowViewModel : IDuplicateSearchHost
                     StatusText = DescribeProgress(report, finder.Options);
                 }
             });
+            if (target is null)
+            {
+                try
+                {
+                    result = await finder.FindAsync(scope, progress, cancellationToken);
+                }
+                finally
+                {
+                    searching = false;
+                }
+
+                return DescribeResult(result);
+            }
+
+            // The Duplicates tab: list the files that share a size unless a stopped scan left some compared, then
+            // compare only the sets that still just share a size, showing each as soon as it is done.
+            if (target.IsLive)
+            {
+                var sizes = await Task.Run(() => finder.GroupBySize(scope, cancellationToken), cancellationToken);
+                target.ShowComparing(sizes, scopeName, finder, _timeProvider.GetLocalNow());
+            }
+
+            var outcomes = new Progress<DuplicateGroupOutcome>(outcome =>
+            {
+                if (searching)
+                {
+                    target.ShowOutcome(outcome);
+                }
+            });
             try
             {
-                result = await finder.FindAsync(scope, progress, cancellationToken);
+                result = await finder.FindAsync(target.GetSizeOnlyFiles(), progress, outcomes, cancellationToken);
             }
             finally
             {
                 searching = false;
             }
 
-            return DescribeResult(result);
+            target.FinishComparison(result, finder, _timeProvider.GetLocalNow());
+            return DescribeResult(target.Result);
         }
     }
 

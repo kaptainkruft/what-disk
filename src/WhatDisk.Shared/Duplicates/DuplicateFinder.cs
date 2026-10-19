@@ -10,7 +10,8 @@ namespace WhatDisk.Duplicates;
 /// <summary>
 /// Finds files with the same contents, reading as little as it can:
 /// <list type="number">
-/// <item>files are grouped by length, from the scan alone, without touching the disk;</item>
+/// <item>files are grouped by length, from the scan alone, without touching the disk; the lengths are then compared
+/// smallest first, and each one's outcome can be reported as soon as it is known;</item>
 /// <item>files up to <see cref="DuplicateFinderOptions.FullHashLimit"/> (1 MiB by default), which are quick to read,
 /// are hashed whole with XXH128, and files with the same length and hash form a set confirmed by
 /// <see cref="DuplicateComparison.Hash"/>;</item>
@@ -71,11 +72,28 @@ public sealed class DuplicateFinder
     /// <param name="cancellationToken">Stops the search.</param>
     /// <returns>The sets of duplicates.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
-    public Task<DuplicateSearchResult> FindAsync(IEnumerable<FileSystemNode> roots, IProgress<DuplicateProgress>? progress, CancellationToken cancellationToken)
+    public Task<DuplicateSearchResult> FindAsync(IEnumerable<FileSystemNode> roots, IProgress<DuplicateProgress>? progress, CancellationToken cancellationToken) =>
+        FindAsync(roots, progress, null, cancellationToken);
+
+    /// <summary>
+    /// Finds the duplicate files in scanned trees, reporting what each length's files turned out to be as soon as they
+    /// have been compared, smallest length first.
+    /// </summary>
+    /// <param name="roots">The top-level items of the scan.</param>
+    /// <param name="progress">Receives progress reports, at most every <see cref="ProgressInterval"/>; may be <see langword="null"/>.</param>
+    /// <param name="outcomes">Receives the outcome of each length compared; may be <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Stops the search.</param>
+    /// <returns>The sets of duplicates.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    public Task<DuplicateSearchResult> FindAsync(
+        IEnumerable<FileSystemNode> roots,
+        IProgress<DuplicateProgress>? progress,
+        IProgress<DuplicateGroupOutcome>? outcomes,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(roots);
         var state = new SearchState(progress);
-        return Task.Run(() => CompareAsync(GroupTree([.. roots], Options.MinimumLength, state, cancellationToken), state, cancellationToken), cancellationToken);
+        return Task.Run(() => CompareAsync(GroupTree([.. roots], Options.MinimumLength, state, cancellationToken), state, outcomes, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -114,7 +132,24 @@ public sealed class DuplicateFinder
     /// <param name="cancellationToken">Stops the search.</param>
     /// <returns>The sets of duplicates.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
-    public Task<DuplicateSearchResult> FindAsync(IEnumerable<DuplicateCandidate> candidates, IProgress<DuplicateProgress>? progress, CancellationToken cancellationToken)
+    public Task<DuplicateSearchResult> FindAsync(IEnumerable<DuplicateCandidate> candidates, IProgress<DuplicateProgress>? progress, CancellationToken cancellationToken) =>
+        FindAsync(candidates, progress, null, cancellationToken);
+
+    /// <summary>
+    /// Finds the duplicates among the given files, reporting what each length's files turned out to be as soon as they
+    /// have been compared, smallest length first.
+    /// </summary>
+    /// <param name="candidates">The files, with the lengths they are expected to have.</param>
+    /// <param name="progress">Receives progress reports, at most every <see cref="ProgressInterval"/>; may be <see langword="null"/>.</param>
+    /// <param name="outcomes">Receives the outcome of each length compared; may be <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Stops the search.</param>
+    /// <returns>The sets of duplicates.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    public Task<DuplicateSearchResult> FindAsync(
+        IEnumerable<DuplicateCandidate> candidates,
+        IProgress<DuplicateProgress>? progress,
+        IProgress<DuplicateGroupOutcome>? outcomes,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         var state = new SearchState(progress);
@@ -137,7 +172,7 @@ public sealed class DuplicateFinder
             AddToGroup(groups, candidate.Length, candidate);
         }
 
-        return Task.Run(() => CompareAsync([.. groups.Values.Where(static group => group.Count > 1)], state, cancellationToken), cancellationToken);
+        return Task.Run(() => CompareAsync([.. groups.Values.Where(static group => group.Count > 1)], state, outcomes, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -437,39 +472,37 @@ public sealed class DuplicateFinder
         [.. paths.Order(StringComparer.OrdinalIgnoreCase).ThenBy(static path => path, StringComparer.Ordinal)];
 
     /// <summary>
-    /// Compares the files in each length group (larger files by samples, smaller ones by hash) and numbers the sets
-    /// found.
+    /// Compares the files in each length group, smallest length first (smaller files by hash, then larger ones by
+    /// samples), reports each group's outcome as soon as it is known, and numbers the sets found.
     /// </summary>
     /// <param name="groups">The files, grouped by length.</param>
     /// <param name="state">Counts and reports progress.</param>
+    /// <param name="outcomes">Receives the outcome of each group; may be <see langword="null"/>.</param>
     /// <param name="cancellationToken">Stops the search.</param>
     /// <returns>The result.</returns>
-    private async Task<DuplicateSearchResult> CompareAsync(List<List<DuplicateCandidate>> groups, SearchState state, CancellationToken cancellationToken)
+    private async Task<DuplicateSearchResult> CompareAsync(
+        List<List<DuplicateCandidate>> groups,
+        SearchState state,
+        IProgress<DuplicateGroupOutcome>? outcomes,
+        CancellationToken cancellationToken)
     {
         var options = new ParallelOptions { MaxDegreeOfParallelism = _parallelism, CancellationToken = cancellationToken };
-        var large = groups.Where(group => group[0].Length > Options.FullHashLimit).ToList();
-        var small = groups.Where(group => group[0].Length <= Options.FullHashLimit).ToList();
+        var small = groups.Where(group => group[0].Length <= Options.FullHashLimit).OrderBy(static group => group[0].Length).ToList();
+        var large = groups.Where(group => group[0].Length > Options.FullHashLimit).OrderBy(static group => group[0].Length).ToList();
         var matches = new ConcurrentBag<(Member[] Files, DuplicateComparison Comparison)>();
-
-        state.Begin(DuplicateSearchStage.Sampling, large.Sum(static group => group.Count));
-        await Parallel.ForEachAsync(large, options, (group, token) =>
-        {
-            foreach (var match in SampleGroup(group, state, token))
-            {
-                matches.Add((match, DuplicateComparison.Samples));
-            }
-
-            return ValueTask.CompletedTask;
-        });
 
         state.Begin(DuplicateSearchStage.Hashing, small.Sum(static group => group.Count), small.Sum(static group => group[0].Length * group.Count));
         await Parallel.ForEachAsync(small, options, (group, token) =>
         {
-            foreach (var match in HashGroup(group, state, token))
-            {
-                matches.Add((match, DuplicateComparison.Hash));
-            }
+            Collect(group[0].Length, HashGroup(group, state, token), DuplicateComparison.Hash);
+            return ValueTask.CompletedTask;
+        });
+        state.Report(force: true);
 
+        state.Begin(DuplicateSearchStage.Sampling, large.Sum(static group => group.Count));
+        await Parallel.ForEachAsync(large, options, (group, token) =>
+        {
+            Collect(group[0].Length, SampleGroup(group, state, token), DuplicateComparison.Samples);
             return ValueTask.CompletedTask;
         });
         state.Report(force: true);
@@ -486,6 +519,24 @@ public sealed class DuplicateFinder
             state.HardLinks,
             [.. state.Failures.OrderBy(static failure => failure.Path, StringComparer.Ordinal)],
             state.SmallFiles);
+
+        void Collect(long length, Member[][] found, DuplicateComparison comparison)
+        {
+            foreach (var match in found)
+            {
+                matches.Add((match, comparison));
+            }
+
+            outcomes?.Report(new DuplicateGroupOutcome(
+                length,
+                comparison,
+                [
+                    .. found
+                        .Select(static match => new DuplicateMatch(match[0].Hash is { } hash ? FormatHash(hash) : null, SortPaths(match.Select(static file => file.Path))))
+                        .OrderByDescending(static match => match.Paths.Count)
+                        .ThenBy(static match => match.Paths[0], StringComparer.Ordinal),
+                ]));
+        }
     }
 
     /// <summary>

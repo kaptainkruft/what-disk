@@ -114,7 +114,7 @@ public sealed class SettingsAppliedTests : IDisposable
     /// <summary>
     /// The duplicate search uses the settings: the Duplicates tab lists files over the small file limit (none here,
     /// until the limit is zero), with no hashing limit every file is sampled, and with automatic verification the
-    /// sampled sets are hashed as soon as the results appear.
+    /// sampled sets are hashed as soon as the results appear (after a new scan, as a compared tab is not compared again).
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
@@ -137,7 +137,12 @@ public sealed class SettingsAppliedTests : IDisposable
         Assert.Equal(DuplicateComparison.Samples, Assert.Single(results.Sets).Comparison);
         Assert.Contains("compared by 8 samples of 1 KiB", results.Details, StringComparison.Ordinal);
 
+        // Every set has been compared, so finding duplicates again compares nothing until the next scan.
+        await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
+        Assert.Equal(DuplicateComparison.Samples, Assert.Single(results.Sets).Comparison);
+
         _settings.Set(SettingsCatalog.Duplicates.VerifyAutomatically, true);
+        await viewModel.StartScanCommand.ExecuteAsync(null);
         await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
         Assert.Equal(DuplicateComparison.Hash, Assert.Single(results.Sets).Comparison);

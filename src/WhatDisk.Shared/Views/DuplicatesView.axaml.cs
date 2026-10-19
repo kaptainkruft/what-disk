@@ -9,10 +9,11 @@ using WhatDisk.ViewModels;
 namespace WhatDisk.Views;
 
 /// <summary>
-/// Shows the results of a duplicate search in a tab: a grid of set number, full path, size, hash and how each file was
-/// compared, one row per file, with buttons to hash every sampled set, and to copy the results to the clipboard as
-/// CSV or export them to a CSV file. Double-clicking a row shows the file in the file manager; its context menu hashes
-/// the row's set. Closing the tab stops any hashing.
+/// Shows duplicate files in a tab: a grid of set number, full path, size, hash and how each file was compared, one row
+/// per file, with buttons to compare the files (in the Duplicates tab, a sampled scan, and including smaller files),
+/// to hash every set not yet confirmed by hash, and to copy the results to the clipboard as CSV or export them to a
+/// CSV file. Double-clicking a row shows the file in the file manager; its context menu hashes the row's set. Closing a
+/// tab stops any hashing.
 /// </summary>
 public partial class DuplicatesView : UserControl
 {
@@ -67,23 +68,23 @@ public partial class DuplicatesView : UserControl
     private IStorageProvider? StorageProvider => TopLevel.GetTopLevel(this)?.StorageProvider;
 
     /// <summary>
-    /// Re-evaluates Export when the rows change or hashing starts or stops.
+    /// Re-evaluates Export when the rows change or a scan or hashing starts or stops.
     /// </summary>
     /// <param name="sender">The view model.</param>
     /// <param name="e">The changed property.</param>
     private void OnResultsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(DuplicateResultsViewModel.HasRows) or nameof(DuplicateResultsViewModel.IsVerifying))
+        if (e.PropertyName is nameof(DuplicateResultsViewModel.HasRows) or nameof(DuplicateResultsViewModel.IsBusy))
         {
             ExportCommand.NotifyCanExecuteChanged();
         }
     }
 
     /// <summary>
-    /// Determines whether there is anything to export, somewhere to save it, and no hashing changing the sets.
+    /// Determines whether there is anything to export, somewhere to save it, and no scan or hashing changing the sets.
     /// </summary>
     /// <returns><see langword="true"/> when Export is enabled.</returns>
-    private bool CanExport() => DataContext is DuplicateResultsViewModel { HasRows: true, IsVerifying: false } && StorageProvider is { CanSave: true };
+    private bool CanExport() => DataContext is DuplicateResultsViewModel { HasRows: true, IsBusy: false } && StorageProvider is { CanSave: true };
 
     /// <summary>
     /// Asks for a file name with the system's save dialog, starting in Documents (or the Desktop), and saves the CSV.

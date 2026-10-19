@@ -68,27 +68,6 @@
       <!-- The menus above, drawn here where the platform has no native menu bar (it hides itself on macOS). -->
       <NativeMenuBar DockPanel.Dock="Top" />
 
-      <!--
-        The tabs: Scan, which cannot be closed, then a tab for each duplicate search's results and, when open, the
-        settings. Everything stays in this one window, so the macOS menu bar never switches between windows' menus.
-      -->
-      <Border DockPanel.Dock="Top" Classes="tab-strip">
-        <TabStrip x:Name="TabStrip" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab}">
-          <TabStrip.ItemTemplate>
-            <DataTemplate x:DataType="vm:TabViewModel">
-              <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" ToolTip.Tip="{Binding ToolTip}">
-                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" MaxWidth="280" TextTrimming="CharacterEllipsis" />
-                <Button Classes="tab-close" IsVisible="{Binding CanClose}" ToolTip.Tip="Close Tab"
-                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
-                        CommandParameter="{Binding}">
-                  <TextBlock Text="×" />
-                </Button>
-              </StackPanel>
-            </DataTemplate>
-          </TabStrip.ItemTemplate>
-        </TabStrip>
-      </Border>
-
       <!-- Progress -->
       <Border DockPanel.Dock="Bottom" Classes="statusbar">
         <DockPanel>
@@ -103,6 +82,29 @@
           <TextBlock Classes="muted" Text="{Binding ProgressPath}" Margin="16,0,0,0" VerticalAlignment="Center"
                      HorizontalAlignment="Right" TextTrimming="PrefixCharacterEllipsis" />
         </DockPanel>
+      </Border>
+
+      <!--
+        The tabs, along the bottom above the status bar: Scan and Duplicates, which cannot be closed, then a tab for
+        each search of the selection and, when open, the settings. Everything stays in this one window, so the macOS
+        menu bar never switches between windows' menus. Declared after the status bar, so that the status bar stays
+        at the very bottom.
+      -->
+      <Border DockPanel.Dock="Bottom" Classes="tab-strip">
+        <TabStrip x:Name="TabStrip" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab}">
+          <TabStrip.ItemTemplate>
+            <DataTemplate x:DataType="vm:TabViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" ToolTip.Tip="{Binding ToolTip}">
+                <TextBlock Text="{Binding Header}" VerticalAlignment="Center" MaxWidth="280" TextTrimming="CharacterEllipsis" />
+                <Button Classes="tab-close" IsVisible="{Binding CanClose}" ToolTip.Tip="Close Tab"
+                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
+                        CommandParameter="{Binding}">
+                  <TextBlock Text="×" />
+                </Button>
+              </StackPanel>
+            </DataTemplate>
+          </TabStrip.ItemTemplate>
+        </TabStrip>
       </Border>
 
       <!-- The tabs' pages: each stays in place while hidden, so it keeps its scroll position, columns and selection. -->

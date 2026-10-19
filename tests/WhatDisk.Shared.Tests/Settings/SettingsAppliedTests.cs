@@ -112,8 +112,9 @@ public sealed class SettingsAppliedTests : IDisposable
     }
 
     /// <summary>
-    /// The duplicate search uses the settings: with no hashing limit every file is sampled, and with automatic
-    /// verification the sampled sets are hashed as soon as the results appear.
+    /// The duplicate search uses the settings: the Duplicates tab lists files over the small file limit (none here,
+    /// until the limit is zero), with no hashing limit every file is sampled, and with automatic verification the
+    /// sampled sets are hashed as soon as the results appear.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
@@ -123,19 +124,25 @@ public sealed class SettingsAppliedTests : IDisposable
         _settings.Set(SettingsCatalog.Duplicates.SampleCount, 8);
         _settings.Set(SettingsCatalog.Duplicates.SampleSizeKiB, 1);
         var viewModel = await ScanAsync();
+        var results = viewModel.DuplicatesTab;
 
         await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        var sampled = Assert.Single(viewModel.DuplicateTabs());
-        Assert.Equal(DuplicateComparison.Samples, Assert.Single(sampled.Sets).Comparison);
-        Assert.Contains("compared by 8 samples of 1 KiB", sampled.Details, StringComparison.Ordinal);
+        Assert.Empty(results.Sets);
+        Assert.Contains("Left out: 3 files of 1 MiB or less", results.Details, StringComparison.Ordinal);
+
+        _settings.Set(SettingsCatalog.Duplicates.EstimateOverMiB, 0);
+        await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
+
+        Assert.Equal(DuplicateComparison.Samples, Assert.Single(results.Sets).Comparison);
+        Assert.Contains("compared by 8 samples of 1 KiB", results.Details, StringComparison.Ordinal);
 
         _settings.Set(SettingsCatalog.Duplicates.VerifyAutomatically, true);
         await viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        var verified = viewModel.DuplicateTabs()[1];
-        Assert.Equal(DuplicateComparison.Hash, Assert.Single(verified.Sets).Comparison);
-        Assert.Equal("Every set is confirmed by hash.", verified.VerificationSummary);
+        Assert.Equal(DuplicateComparison.Hash, Assert.Single(results.Sets).Comparison);
+        Assert.Equal("Every set is confirmed by hash.", results.VerificationSummary);
+        Assert.Empty(viewModel.DuplicateTabs());
     }
 
     /// <summary>

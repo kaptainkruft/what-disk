@@ -57,6 +57,11 @@ public sealed partial class MainWindowViewModel
             {
                 IsTreeActive = false;
             }
+
+            if (ReferenceEquals(value, DuplicatesTab) && _duplicatesStale)
+            {
+                UpdateDuplicates();
+            }
         }
     }
 

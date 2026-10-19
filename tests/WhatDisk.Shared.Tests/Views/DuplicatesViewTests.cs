@@ -51,8 +51,10 @@ public sealed class DuplicatesViewTests
         Assert.Equal(["Set", "Full Path", "Size", "Hash (XXH128)", "Comparison"], titles);
         Assert.Equal(["1", "/Users/me/Desktop/Holiday copy.mov", "734 MB", "—", "Sampled"], RowTexts(list, 0));
         Assert.Equal(["2", "/Users/me/Downloads/IMG_0042.HEIC", "2.40 MB", "3c59dc048e8850243be8079a5c74d079", "Hash"], RowTexts(list, 3));
-        Assert.True(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Verify All by Hash").IsEffectivelyEnabled);
+        Assert.True(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Full Hash Scan").IsEffectivelyEnabled);
         Assert.False(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Stop").IsVisible);
+        Assert.False(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Name == "SampledScanButton").IsVisible);
+        Assert.False(window.GetVisualDescendants().OfType<Button>().Single(static button => button.Name == "SmallFilesButton").IsVisible);
         Capture(window, $"duplicates-view-{variant.ToLowerInvariant()}.png");
 
         var copy = window.GetVisualDescendants().OfType<Button>().Single(static button => button.Content as string == "Copy CSV");

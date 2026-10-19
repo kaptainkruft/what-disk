@@ -50,10 +50,10 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
             results.Rows.Select(static row => (row.SetId, row.Path, row.SizeText, row.HashText, row.ComparisonText, row.IsAlternate)));
         Assert.Equal("2,000,000 bytes", results.Rows[0].ExactSizeText);
         Assert.Equal("2 sets of duplicates: 5 files. Keeping one file of each set would free 4.00 MB.", results.Summary);
-        Assert.Equal("1 set confirmed by hash; 1 set of files over 1 MiB only matched on 64 samples of 4 KiB. Verify by hash before deleting anything.", results.VerificationSummary);
+        Assert.Equal("1 set confirmed by hash; 1 set of files over 1 MiB only matched on 64 samples of 4 KiB. Run a Full Hash Scan before deleting anything.", results.VerificationSummary);
         Assert.Equal("Of 100 files, 7 shared a size with another: 4 up to 1 MiB were hashed, and 3 larger ones were compared by 64 samples of 4 KiB. Left out: 3 empty files, 1 cloud-only file, 2 extra hard links.", results.Details);
         Assert.Equal("WhatDisk Duplicates 2026-10-17 0930.csv", results.SuggestedFileName);
-        Assert.True(results.HasSampledSets);
+        Assert.True(results.HasUnconfirmedSets);
         Assert.Null(results.FailureSummary);
     }
 
@@ -199,14 +199,14 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
         Assert.True(results.VerifySetCommand.CanExecute(results.Rows[2]));
 
         var kept = results.Rows[2];
-        await results.VerifyAllCommand.ExecuteAsync(null);
+        await results.FullHashScanCommand.ExecuteAsync(null);
 
         Assert.Same(kept, results.Rows[2]);
         Assert.Equal("Hash", kept.ComparisonText);
         Assert.Equal("Hashed set 2: every file is identical.", results.Message);
         Assert.Equal("Every set is confirmed by hash.", results.VerificationSummary);
-        Assert.False(results.HasSampledSets);
-        Assert.False(results.VerifyAllCommand.CanExecute(null));
+        Assert.False(results.HasUnconfirmedSets);
+        Assert.False(results.FullHashScanCommand.CanExecute(null));
     }
 
     /// <summary>
@@ -228,7 +228,7 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
         ];
         var results = Create(Result() with { Sets = sets });
 
-        await results.VerifyAllCommand.ExecuteAsync(null);
+        await results.FullHashScanCommand.ExecuteAsync(null);
 
         Assert.Equal([2, 2, 2, 4, 4, 3, 3], results.Rows.Select(static row => row.SetId));
         Assert.Equal([PathOf("y1"), PathOf("y2"), PathOf("y3"), PathOf("x1"), PathOf("x2")], results.Rows.Take(5).Select(static row => row.Path));
@@ -246,23 +246,23 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
     {
         var content = Content(5, 4_000_000);
         var results = Create(Result() with { Sets = [new DuplicateSet(1, 4_000_000, null, [Write("a", content), Write("b", content)], DuplicateComparison.Samples)] });
-        Assert.False(results.StopVerifyingCommand.CanExecute(null));
+        Assert.False(results.StopCommand.CanExecute(null));
 
-        var verifying = results.VerifyAllCommand.ExecuteAsync(null);
+        var verifying = results.FullHashScanCommand.ExecuteAsync(null);
 
         Assert.True(results.IsVerifying);
         Assert.StartsWith("Hashing set 1: ", results.Message, StringComparison.Ordinal);
         Assert.False(results.CopyCsvCommand.CanExecute(null));
-        Assert.False(results.VerifyAllCommand.CanExecute(null));
+        Assert.False(results.FullHashScanCommand.CanExecute(null));
         Assert.False(results.VerifySetCommand.CanExecute(results.Rows[0]));
-        Assert.True(results.StopVerifyingCommand.CanExecute(null));
+        Assert.True(results.StopCommand.CanExecute(null));
 
-        results.StopVerifyingCommand.Execute(null);
+        results.StopCommand.Execute(null);
         await verifying;
 
         Assert.False(results.IsVerifying);
         Assert.True(results.CopyCsvCommand.CanExecute(null));
-        Assert.False(results.StopVerifyingCommand.CanExecute(null));
+        Assert.False(results.StopCommand.CanExecute(null));
     }
 
     /// <summary>

@@ -595,6 +595,8 @@ public sealed partial class MainWindowViewModel
         {
             command.NotifyCanExecuteChanged();
         }
+
+        DuplicatesTab.NotifySearchStateChanged();
     }
 
     /// <summary>

@@ -392,6 +392,66 @@ public sealed class DuplicateFinderTests : IDisposable
     }
 
     /// <summary>
+    /// Grouping by size reads nothing: files of the same length form a set compared only by size, whatever their
+    /// contents, numbered by the space they would waste; files no longer than the minimum length, empty files,
+    /// cloud-only files and extra hard links are left out and counted.
+    /// </summary>
+    [Fact]
+    public void GroupBySize_ListsFilesThatShareALength()
+    {
+        // Nothing is written: grouping by size must not touch the disk.
+        var root = TestTree.Root(_base);
+        var sub = TestTree.Dir(root, "sub");
+        TestTree.Publish(sub, TestTree.File(sub, "movie copy", 5000), TestTree.File(sub, "other", 2000));
+        TestTree.Publish(
+            root,
+            TestTree.File(root, "movie", 5000),
+            TestTree.File(root, "same size, other contents", 2000),
+            TestTree.File(root, "small", 100),
+            TestTree.File(root, "small too", 100),
+            TestTree.File(root, "alone", 3000),
+            sub,
+            new FileNode("cloud", root, NodeKind.File, 0, 5000, DateTime.MinValue, EntryAttributes.Offline, false),
+            new FileNode("hardlink", root, NodeKind.File, 0, 5000, DateTime.MinValue, EntryAttributes.None, isHardLinkDuplicate: true),
+            TestTree.File(root, "empty", 0));
+
+        var result = new DuplicateFinder(options: new DuplicateFinderOptions { MinimumLength = 1000 }).GroupBySize([root], TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [
+                (1, 5000L, (string[])[PathOf("movie"), PathOf("sub/movie copy")]),
+                (2, 2000L, [PathOf("same size, other contents"), PathOf("sub/other")]),
+            ],
+            result.Sets.Select(static set => (set.Id, set.Length, set.Paths.ToArray())));
+        Assert.All(result.Sets, static set => Assert.Equal((DuplicateComparison.Size, (string?)null), (set.Comparison, set.Hash)));
+        Assert.Equal((5, 4, 0, 0), (result.FilesConsidered, result.SizeMatches, result.HashedFiles, result.SampledFiles));
+        Assert.Equal((2, 1, 1, 1), (result.SmallFiles, result.EmptyFiles, result.OfflineFiles, result.HardLinks));
+        Assert.Equal("Size", DuplicateCsv.ComparisonName(DuplicateComparison.Size));
+    }
+
+    /// <summary>
+    /// The search leaves out files no longer than the minimum length too, counting them, and compares the rest.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [Fact]
+    public async Task MinimumLength_LeavesOutSmallerFiles()
+    {
+        var small = Content(30, 500);
+        var large = Content(31, 5000);
+        Write("small-a", small);
+        Write("small-b", small);
+        Write("large-a", large);
+        Write("large-b", large);
+        var finder = new DuplicateFinder(options: new DuplicateFinderOptions { MinimumLength = 500 });
+
+        var result = await finder.FindAsync(Candidates("small-a", "small-b", "large-a", "large-b"), null, TestContext.Current.CancellationToken);
+
+        Assert.Equal([PathOf("large-a"), PathOf("large-b")], Assert.Single(result.Sets).Paths);
+        Assert.Equal((2, 2), (result.FilesConsidered, result.SmallFiles));
+        Assert.Equal("500 bytes", finder.Options.MinimumLengthText);
+    }
+
+    /// <summary>
     /// Progress is reported for sampling the larger files and then hashing the smaller ones, ending with every file
     /// and byte hashed.
     /// </summary>

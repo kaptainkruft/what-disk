@@ -34,16 +34,21 @@ setting is Windows-only.
 
 ### One window, with tabs
 
-Everything the app shows lives in its one window. The main window has a tab strip under the menu bar:
+Everything the app shows lives in its one window. The main window has a tab strip along the bottom, above the status
+bar, as a spreadsheet's sheet tabs are; its hairline faces the page above, and the selected tab is underlined:
 
 - **Scan** is always first and cannot be closed. It holds the toolbar for choosing what to scan, the tree, the chart,
   the Potential duplicate space pane and the details.
-- **Each duplicate search** adds a tab with its results ("Duplicates in Photos"; the tooltip has the full scope) and
-  shows it. Closing the tab stops any hashing it is doing.
+- **Duplicates** is always second and cannot be closed either. It covers the whole scan (see the Duplicate finder
+  below): empty before a scan, then the files that share a size, then the result of comparing them.
+- **Each search of the selection** adds a tab with its results ("Duplicates in Photos"; the tooltip has the full
+  scope) and shows it. Closing the tab stops any hashing it is doing.
 - **Settings** opens in a tab too, one at most; opening it again shows the existing tab.
-- Close Tab (⌘W on macOS, Ctrl+W on Windows, and the × on each tab) closes any tab but Scan and shows the one before.
+- Close Tab (⌘W on macOS, Ctrl+W on Windows, and the × on each tab) closes any tab but Scan and Duplicates and shows
+  the one before.
 
-The tabs are view models (`TabViewModel`: the Scan tab, `DuplicateResultsViewModel` and `SettingsViewModel`) in the
+The tabs are view models (`TabViewModel`: the Scan tab, `DuplicateResultsViewModel` for Duplicates and each search of
+the selection, and `SettingsViewModel`) in the
 main view model's `Tabs` collection, so tests drive them without a window. Every tab's page stays in place while
 hidden, so it keeps its scroll position, column widths and selection. Leaving the Scan tab makes the tree inactive, so
 the item commands and their shortcuts do not act on a tree that cannot be seen; coming back gives the tree focus again.
@@ -141,7 +146,8 @@ and the macOS menu bar integration is thin and buggy on macOS 27, which led to t
   is computed in the same background pass. `PotentialDuplicateAggregator` groups the regular files over 1 MiB (the
   `duplicates.estimateOverMiB` setting) by length. For each length shared by two or more files, the space they take
   on disk beyond the smallest copy counts as potentially wasted. Extra hard links, cloud-only files and smaller files
-  are left out, and no file is read, so it is a dirty, size-only list that Find Duplicates later confirms by content.
+  are left out, and no file is read, so it is a dirty, size-only estimate; the Duplicates tab lists the same files,
+  and its scans confirm them by content.
   Like the file-type totals, the groups of large completed folders are cached and forgotten when their contents
   change, so the estimate follows the scan as it runs and stays cheap afterwards. The pane shows the total, a bar of its share of the
   folder's size (in the chart's first colour, with the percentage inside), and an info button that explains what was
@@ -160,18 +166,35 @@ and the macOS menu bar integration is thin and buggy on macOS 27, which led to t
 
 ### Duplicate finder
 
-A duplicate search takes a scope: the folders and files whose files it compares, as one set. **Tools › Find
-Duplicates in Scanned Files** (⇧⌘D on macOS, Ctrl+Shift+D on Windows) uses the scan's top-level items. **Find
-Duplicates in Selection** (⌘D, Ctrl+D; also in the context menu) uses the selected items, keeping only the topmost of
-nested ones. It is enabled when the selection could hold duplicates: a folder, or more than one item. Selecting two
-folders therefore finds copies between them as well as within each; the finder itself only sees one list of files.
-The results open in a new tab titled with the scope. A search runs as a file operation, so the status bar shows
-its progress and Stop cancels it. While it runs, the volume picker, path box, Browse and Scan are disabled, because a
-new scan would replace the tree being searched. It reads as little as it can:
+The **Duplicates** tab covers the whole scan and follows it through three stages:
+
+- **Before a scan** it is empty, says how it will fill, and its buttons are disabled.
+- **Size only.** As soon as a scan starts, it lists the files over 1 MiB (the `duplicates.estimateOverMiB` setting,
+  shared with the Potential duplicate space pane) that share a size, marked **Size**: step 1 below alone, without
+  reading anything (`DuplicateFinder.GroupBySize`). The list is recomputed on the refresh timer, but only while the tab
+  is shown (otherwise when it is next shown) and at most once a second while the scan runs. Rows are reconciled with
+  `ListReconciler` rather than replaced, so the scroll position and selection survive. After the scan it still
+  follows the tree, so deleted files drop out. **Include Files of 1 MiB or Less…** adds the smaller files for the rest
+  of the session, after a question warning that small files share sizes so often that the list can grow to hundreds
+  of thousands of rows; it is not a setting.
+- **Compared.** **Sampled Scan** (also Tools › Find Duplicates in Scanned Files, ⇧⌘D on macOS, Ctrl+Shift+D on
+  Windows, which shows the tab first) runs steps 1 to 3 on the same files. **Full Hash Scan** hashes every file of
+  every set not yet confirmed by hash, size-only or sampled. Both are enabled once the scan has finished (or was
+  stopped). The tab then keeps the result until the next scan, a new small file limit, or including or leaving out the
+  smaller files, any of which lists the files that share a size again.
+
+**Find Duplicates in Selection** (⌘D, Ctrl+D; also in the context menu) compares every non-empty file of the selected
+items, keeping only the topmost of nested ones, and opens the results in a new tab titled with the scope. It is
+enabled when the selection could hold duplicates: a folder, or more than one item. Selecting two folders therefore
+finds copies between them as well as within each; the finder itself only sees one list of files. A sampled scan or a
+search of the selection runs as a file operation, so the status bar shows its progress and Stop cancels it. While it
+runs, the volume picker, path box, Browse and Scan are disabled, because a new scan would replace the tree being
+searched. A search reads as little as it can:
 
 1. **Length.** The scanned regular files are grouped by length from the scan tree alone. Only lengths shared by two or
-   more files go further, which usually leaves a small part of the scan. Empty files, cloud-only files (`Offline`,
-   which reading would download) and hard links the scan already recognised are left out. Before any file is read,
+   more files go further, which usually leaves a small part of the scan. Empty files, files no longer than the
+   minimum length (in the Duplicates tab), cloud-only files (`Offline`, which reading would download) and hard links
+   the scan already recognised are left out. Before any file is read,
    its identity (device and file number, from the head's enumerator) is checked, so hard links to the same data are
    read once. This matters on Windows, where the scan cannot detect hard links.
 2. **Files up to 1 MiB are hashed.** They are quick to read, so each is read in full and hashed with XXH128
@@ -183,9 +206,9 @@ new scan would replace the tree being searched. It reads as little as it can:
 
 Sampling is much cheaper, but it is not proof. Measured on real folders, about 0.3% of the files that 64 × 4 KiB
 samples matched were not identical: mostly signed binaries that differ only in their code signature. So the
-results tab says how many sets are only sampled and asks for them to be verified before anything is deleted.
-**Verify All by Hash** hashes every sampled set, largest waste first, and a row's context menu has **Verify Set by
-Hash** for its set alone. Hashing confirms a set (its rows switch to Hash and show the hash, keeping the selection),
+results tab says how many sets are only sampled (or only share a size) and asks for a full hash scan before anything
+is deleted. **Full Hash Scan** hashes every set not confirmed by hash, largest waste first, and a row's context menu
+has **Verify Set by Hash** for its set alone. Hashing confirms a set (its rows switch to Hash and show the hash, keeping the selection),
 drops the files that differ, or splits the set when it held two contents. The largest group keeps the set's number
 and the others get new numbers and follow it, so numbers already noted stay valid. Stop (or closing the tab) ends
 hashing, and sets already hashed keep their results. Copy and Export wait until it finishes.
@@ -197,7 +220,8 @@ A file that cannot be read, or whose length changed since the scan, is reported 
 Sets are numbered by the space they waste (length × (copies − 1)), largest first. The results tab lists one row
 per file with its set, full path, size, hash and comparison, and shades every other set. Double-clicking a row shows
 the file in Finder or File Explorer. **Copy CSV** and **Export CSV…** produce the same RFC 4180 text: a header row
-(`SetID,Full Path,Size,Hash,Comparison`), sizes in bytes, an empty hash for sampled files, quotes only where needed,
+(`SetID,Full Path,Size,Hash,Comparison`, the comparison being Hash, Sampled or Size), sizes in bytes, an empty hash
+for sampled and size-only files, quotes only where needed,
 and CR LF line ends. The exported file starts with a UTF-8 byte order mark, so spreadsheet programs read non-ASCII
 paths correctly. The save dialog is the system's own, and it starts in Documents (or the Desktop if that is
 unavailable).
@@ -231,7 +255,8 @@ the defaults, so a default changed in a later version reaches everyone who has n
   and renamed over the settings file, and setting a value back to its default removes it (and any section left empty).
   The JSON is handled with `System.Text.Json.Nodes`, which needs no reflection, so the Native AOT builds read it too.
 - **Applying.** Theme and size units apply at once: the app switches its theme variant, and the tree, chart, details
-  and volume list re-format every size. Other settings are read when next needed: scan threads and the network rule
+  and volume list re-format every size. A new duplicate size limit re-estimates the Potential duplicate space and lists
+  the Duplicates tab's files again. Other settings are read when next needed: scan threads and the network rule
   at the next scan, the duplicate options at the next search, confirmation thresholds at the next delete, the
   Windows context menu option each time the tree's menu opens, and the macOS volume list and Windows Recycle Bin flags
   by the platform services.

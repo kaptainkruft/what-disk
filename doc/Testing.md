@@ -1,6 +1,6 @@
 ## Testing
 
-`dotnet test` runs 460 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
+`dotnet test` runs 472 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
@@ -14,8 +14,12 @@
   between samples stay in a sampled set until it is verified. The 1 MiB boundary and sample placement are checked, as
   are verification (confirming, trimming and splitting sets, with stable set numbers and rows kept in place), tiny,
   empty, cloud-only, unreadable, changed and missing files, hard links (with real links on macOS and Windows),
-  progress and cancellation. Scoped searches are checked with their shortcuts: two selected folders find copies
-  between them, one folder alone does not, and the whole scan is searched from anywhere in the window. The size-only Potential duplicate space estimate is checked on built trees (groups, the
+  progress and cancellation, the minimum length, and grouping by size alone. Scoped searches are checked with their
+  shortcuts: two selected folders find copies between them, one folder alone does not, and the whole scan is
+  searched from anywhere in the window. The Duplicates tab is checked on real scans: empty with its commands off
+  before a scan, listing files that share a size while a scan runs (on a fake clock) and only when shown, a sampled
+  scan then a full hash scan, a full hash scan straight from sizes, a new scan listing sizes again, and including
+  smaller files only after the question. The size-only Potential duplicate space estimate is checked on built trees (groups, the
   space beyond one copy, what is left out, scope and cache invalidation) and on a real scan (selection, the minimum
   length setting and deletes). Other tests cover the CSV quoting and the results tab, including a real
   right-click on a row to verify its set, and that Copy and Export give the same CSV.
@@ -27,8 +31,9 @@
   units applied at once, the duplicate options with automatic verification, the macOS volume list and the Windows
   Recycle Bin flags.
 - **Tabs and in-window dialogs:** a real main window shows that results open in a new, selected, closeable tab while
-  Scan cannot be closed, that tabs close in order (with the × and with Ctrl+W), that Settings opens in one tab, that
-  closing a results tab stops its hashing, and that questions and the About box appear inside the window over
+  Scan and Duplicates cannot be closed, that the tab strip sits between the pages and the status bar with the
+  selected tab underlined, that the empty Duplicates page has its buttons disabled, that tabs close in order
+  (with the × and with Ctrl+W), that Settings opens in one tab, that closing a results tab stops its hashing, and that questions and the About box appear inside the window over
   disabled content, with Escape and the default button answering and the commands waiting meanwhile.
 - **Headless UI:** the main window is rendered with Skia in light and dark themes after a real scan. The pane
   proportions, header sorting, selection and the icon pipeline are checked. Real key presses, clicks and drag events

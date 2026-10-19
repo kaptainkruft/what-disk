@@ -3,13 +3,16 @@
              xmlns:vm="using:WhatDisk.ViewModels"
              x:Class="WhatDisk.Views.DuplicatesView"
              x:DataType="vm:DuplicateResultsViewModel">
-  <!-- The results of one duplicate search, in a tab of the main window. -->
+  <!--
+    Duplicate files, in a tab of the main window: the Duplicates tab (the whole scan, from files that share a size to
+    files confirmed by hash), or the results of a search of the selection.
+  -->
   <DockPanel>
     <!-- What was found, and how surely -->
     <Border DockPanel.Dock="Top" Classes="toolbar">
       <StackPanel Spacing="3">
         <TextBlock x:Name="SummaryText" Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
-        <TextBlock x:Name="VerificationText" Classes="small" Classes.warning="{Binding HasSampledSets}"
+        <TextBlock x:Name="VerificationText" Classes="small" Classes.warning="{Binding HasUnconfirmedSets}"
                    Text="{Binding VerificationSummary}" TextWrapping="Wrap"
                    IsVisible="{Binding VerificationSummary, Converter={x:Static ObjectConverters.IsNotNull}}" />
         <TextBlock Classes="muted small" Text="{Binding Details}" TextWrapping="Wrap" />
@@ -22,14 +25,19 @@
       </StackPanel>
     </Border>
 
-    <!-- Verify, copy and export -->
+    <!-- Compare, copy and export -->
     <Border DockPanel.Dock="Bottom" Classes="statusbar">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
-          <Button x:Name="VerifyAllButton" Content="Verify All by Hash" Command="{Binding VerifyAllCommand}"
-                  ToolTip.Tip="Hash every file of the sets that only matched on samples, to confirm they are identical" />
-          <Button x:Name="StopButton" Content="Stop" Command="{Binding StopVerifyingCommand}" IsVisible="{Binding IsVerifying}"
-                  ToolTip.Tip="Stop hashing; sets already hashed keep their results" />
+          <Button x:Name="SmallFilesButton" Content="{Binding SmallFilesText}" Command="{Binding ToggleSmallFilesCommand}"
+                  IsVisible="{Binding SmallFilesText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  ToolTip.Tip="Smaller files share a size far more often, so including them can list very many files" />
+          <Button x:Name="SampledScanButton" Content="Sampled Scan" Command="{Binding SampledScanCommand}" IsVisible="{Binding CoversWholeScan}"
+                  ToolTip.Tip="Compare the files that share a size: smaller files are hashed whole, larger ones compared by samples, as the settings choose" />
+          <Button x:Name="FullHashScanButton" Content="Full Hash Scan" Command="{Binding FullHashScanCommand}"
+                  ToolTip.Tip="Hash every file of the sets not yet confirmed by hash, to be sure they are identical" />
+          <Button x:Name="StopButton" Content="Stop" Command="{Binding StopCommand}" IsVisible="{Binding IsBusy}"
+                  ToolTip.Tip="Stop comparing; sets already hashed keep their results" />
           <Button x:Name="CopyButton" Content="Copy CSV" Command="{Binding CopyCsvCommand}"
                   ToolTip.Tip="Copy the results to the clipboard as CSV, with a header row" />
           <Button x:Name="ExportButton" Content="Export CSV…"
@@ -66,16 +74,16 @@
               <TextBlock Classes="number" Text="{Binding SetId}" />
               <TextBlock Grid.Column="1" Text="{Binding Path}" TextTrimming="PrefixCharacterEllipsis" ToolTip.Tip="{Binding Path}" />
               <TextBlock Grid.Column="2" Classes="number" Text="{Binding SizeText}" ToolTip.Tip="{Binding ExactSizeText}" />
-              <TextBlock Grid.Column="3" Classes="hash" Classes.muted="{Binding IsSampled}" Text="{Binding HashText}" />
-              <TextBlock Grid.Column="4" Classes.warning="{Binding IsSampled}" Text="{Binding ComparisonText}"
+              <TextBlock Grid.Column="3" Classes="hash" Classes.muted="{Binding IsUnconfirmed}" Text="{Binding HashText}" />
+              <TextBlock Grid.Column="4" Classes.warning="{Binding IsUnconfirmed}" Text="{Binding ComparisonText}"
                          ToolTip.Tip="{Binding ComparisonTip}" Background="Transparent" />
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
 
-      <TextBlock Grid.Row="1" Classes="empty-hint" Margin="24"
-                 Text="No two files have the same contents." IsVisible="{Binding !HasRows}" />
+      <TextBlock x:Name="EmptyHintText" Grid.Row="1" Classes="empty-hint" Margin="24"
+                 Text="{Binding EmptyHint}" IsVisible="{Binding !HasRows}" />
     </Grid>
   </DockPanel>
 </UserControl>

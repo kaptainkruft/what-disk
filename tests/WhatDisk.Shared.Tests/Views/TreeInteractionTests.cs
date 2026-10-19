@@ -178,8 +178,8 @@ public sealed class TreeInteractionTests : IDisposable
 
     /// <summary>
     /// Find Duplicates in Selection is disabled for a single file, which cannot hold duplicates on its own; Find
-    /// Duplicates in Scanned Files searches everything, and on Windows its shortcut (Ctrl+Shift+D) works from
-    /// anywhere in the window.
+    /// Duplicates in Scanned Files searches everything in the Duplicates tab, which it shows, and on Windows its
+    /// shortcut (Ctrl+Shift+D) works from anywhere in the window.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
@@ -188,14 +188,17 @@ public sealed class TreeInteractionTests : IDisposable
         Write("b/movie.bin", 5000);
         Write("d/movie copy.bin", 5000);
         var (window, viewModel) = await ShowAsync(TestPlatforms.Windows);
+        viewModel.Settings.Set(SettingsCatalog.Duplicates.EstimateOverMiB, 0);
         Focus(window, Row(viewModel, "a.txt"));
         Assert.False(viewModel.FindDuplicatesInSelectionCommand.CanExecute(null));
 
         window.GetVisualDescendants().OfType<TextBox>().Single().Focus();
         Press(window, viewModel.Platform.Shortcuts.FindDuplicatesInScan);
-        await Eventually.True(() => viewModel.DuplicateTabs().Count == 1 && !viewModel.IsOperationRunning, "the search has finished");
+        await Eventually.True(() => viewModel.DuplicatesTab.Sets.Count > 0 && !viewModel.IsOperationRunning, "the search has finished");
 
-        Assert.Equal([PathOf("b/movie.bin"), PathOf("d/movie copy.bin")], Assert.Single(viewModel.DuplicateTabs()[0].Sets).Paths);
+        Assert.Same(viewModel.DuplicatesTab, viewModel.SelectedTab);
+        Assert.Empty(viewModel.DuplicateTabs());
+        Assert.Equal([PathOf("b/movie.bin"), PathOf("d/movie copy.bin")], Assert.Single(viewModel.DuplicatesTab.Sets).Paths);
     }
 
     /// <summary>

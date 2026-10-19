@@ -2,6 +2,7 @@ using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.Time.Testing;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 using WhatDisk.Tests.Fakes;
 using WhatDisk.ViewModels;
 using WhatDisk.Volumes;
@@ -168,6 +169,47 @@ public sealed class MainWindowViewModelTests : IDisposable
         await scan;
         Assert.False(ViewModel.Tree.Rows[0].IsPending);
         Assert.Null(ViewModel.ProgressPath);
+    }
+
+    /// <summary>
+    /// While a scan runs, the Duplicates tab, when shown, lists the files that share a size as the scan finds them, at
+    /// most every <see cref="MainWindowViewModel.DuplicatesRefreshInterval"/>; its scans wait until the scan has
+    /// finished.
+    /// </summary>
+    /// <returns>A task that completes when the scan has finished.</returns>
+    [AvaloniaFact]
+    public async Task Refresh_ListsFilesThatShareASizeWhileScanning()
+    {
+        using var release = new ManualResetEventSlim();
+        _fs.File("photos/c.jpg", 3000).File("music/other.mp3", 100);
+        _fs.OnRead = (path, token) =>
+        {
+            if (path.EndsWith("music", StringComparison.Ordinal))
+            {
+                release.Wait(token);
+            }
+        };
+        ViewModel.Settings.Set(SettingsCatalog.Duplicates.EstimateOverMiB, 0);
+        ViewModel.PathText = _fs.Root;
+        ViewModel.SelectedTab = ViewModel.DuplicatesTab;
+        var tab = ViewModel.DuplicatesTab;
+
+        var scan = ViewModel.StartScanCommand.ExecuteAsync(null);
+        await Eventually.True(() => ViewModel.IsScanning && ViewModel.Session?.Statistics.FileCount >= 4, "the scan is under way");
+        _time.Advance(MainWindowViewModel.DuplicatesRefreshInterval);
+        await Eventually.True(() => tab.Rows.Count == 2, "the timer listed the files that share a size");
+
+        Assert.Equal(["a.jpg", "c.jpg"], tab.Rows.Select(static row => Path.GetFileName(row.Path)));
+        Assert.True(tab.IsLive);
+        Assert.False(tab.SampledScanCommand.CanExecute(null));
+        Assert.False(tab.FullHashScanCommand.CanExecute(null));
+
+        release.Set();
+        await scan;
+        await ViewModel.WaitForDuplicatesAsync();
+        Assert.Equal(["a.jpg", "c.jpg", "other.mp3", "notes.txt"], tab.Rows.Select(static row => Path.GetFileName(row.Path)));
+        Assert.True(tab.SampledScanCommand.CanExecute(null));
+        Assert.True(tab.FullHashScanCommand.CanExecute(null));
     }
 
     /// <summary>

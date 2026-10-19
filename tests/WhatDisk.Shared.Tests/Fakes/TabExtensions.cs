@@ -8,10 +8,11 @@ namespace WhatDisk.Tests.Fakes;
 internal static class TabExtensions
 {
     /// <summary>
-    /// Gets the duplicate search results' tabs, in order.
+    /// Gets the tabs of the searches of the selection, in order; the Duplicates tab, which is always there, is left
+    /// out.
     /// </summary>
     /// <param name="viewModel">The main window's view model.</param>
     /// <returns>The tabs.</returns>
     public static IReadOnlyList<DuplicateResultsViewModel> DuplicateTabs(this MainWindowViewModel viewModel) =>
-        [.. viewModel.Tabs.OfType<DuplicateResultsViewModel>()];
+        [.. viewModel.Tabs.OfType<DuplicateResultsViewModel>().Where(tab => !ReferenceEquals(tab, viewModel.DuplicatesTab))];
 }

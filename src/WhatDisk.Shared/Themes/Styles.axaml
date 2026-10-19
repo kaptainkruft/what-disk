@@ -247,11 +247,14 @@
     <Setter Property="FontSize" Value="12" />
   </Style>
 
-  <!-- The main window's tab strip -->
+  <!--
+    The main window's tab strip, along the bottom: the hairline faces the content above, and the selected tab keeps
+    Fluent's accent underneath its title.
+  -->
   <Style Selector="Border.tab-strip">
-    <Setter Property="Padding" Value="8,4,8,0" />
+    <Setter Property="Padding" Value="8,0,8,4" />
     <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}" />
-    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
   </Style>
   <Style Selector="Border.tab-strip TabStripItem">
     <Setter Property="FontSize" Value="13" />

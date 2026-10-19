@@ -44,7 +44,7 @@ public static class SettingsCatalog
         new(
             DuplicatesKey,
             "Duplicates",
-            "How Tools › Find Duplicates compares files, and what the Potential duplicate space pane counts.",
+            "How the Duplicates tab and Find Duplicates compare files, and which files they list.",
             [Duplicates.HashUpToMiB, Duplicates.SampleCount, Duplicates.SampleSizeKiB, Duplicates.Readers, Duplicates.VerifyAutomatically, Duplicates.EstimateOverMiB]),
         new(
             DeletingKey,
@@ -232,15 +232,19 @@ public static class SettingsCatalog
             DuplicatesKey,
             "verifyAutomatically",
             "Verify sampled sets automatically",
-            "As soon as the results appear, hash the sets that only matched on samples, as Verify All by Hash does.",
+            "As soon as the results of a sampled scan or a search of the selection appear, hash the sets that only matched on samples, as Full Hash Scan does.",
             false);
 
-        /// <summary>The length, in MiB, files must exceed to count in the Potential duplicate space pane.</summary>
+        /// <summary>
+        /// The length, in MiB, files must exceed to be listed in the Duplicates tab (unless it includes smaller files)
+        /// and to count in the Potential duplicate space pane. The key predates the tab and is kept so that existing
+        /// settings files still apply.
+        /// </summary>
         public static readonly IntSetting EstimateOverMiB = new(
             DuplicatesKey,
             "estimateOverMiB",
-            "Estimate duplicate space among files over",
-            "The Potential duplicate space pane counts files larger than this that share their size with another file, from the scan alone.",
+            "List duplicates among files over",
+            "The Duplicates tab lists, and the Potential duplicate space pane counts, files larger than this that share their size with another file. The tab can include smaller files too.",
             1,
             0,
             1024)

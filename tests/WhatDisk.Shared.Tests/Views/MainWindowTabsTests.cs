@@ -1,6 +1,8 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Layout;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -30,36 +32,93 @@ public sealed class MainWindowTabsTests
     private readonly RecordingShellService _shell = new();
 
     /// <summary>
-    /// The window starts with the Scan tab alone, which cannot be closed; results open in a new, selected tab with a
-    /// close button, whose page replaces the scan's; closing it shows the tab before it again.
+    /// The window starts with the Scan and Duplicates tabs, which cannot be closed; results open in a new, selected tab
+    /// with a close button, whose page replaces the others; closing it shows the tab before it again.
     /// </summary>
     [AvaloniaFact]
     public void ResultsTab_OpensSelectedAndCloses()
     {
         var (window, viewModel) = Show(TestPlatforms.MacOS);
         var strip = window.GetVisualDescendants().OfType<TabStrip>().Single();
-        Assert.Equal(["Scan"], Headers(viewModel));
+        Assert.Equal(["Scan", "Duplicates"], Headers(viewModel));
         Assert.False(viewModel.CloseTabCommand.CanExecute(null));
-        Assert.False(CloseButtons(window).Single().IsVisible);
+        Assert.Equal([false, false], CloseButtons(window).Select(static button => button.IsVisible));
 
         var results = Results("/Users/me/Photos", "Photos");
         viewModel.OpenTab(results);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(["Scan", "Duplicates in Photos"], Headers(viewModel));
+        Assert.Equal(["Scan", "Duplicates", "Duplicates in Photos"], Headers(viewModel));
         Assert.Same(results, strip.SelectedItem);
         Assert.False(window.FindControl<DockPanel>("ScanPage")!.IsVisible);
-        Assert.True(window.GetVisualDescendants().OfType<DuplicatesView>().Single().IsVisible);
-        Assert.Equal([false, true], CloseButtons(window).Select(static button => button.IsVisible));
+        Assert.Same(results, VisibleDuplicatesView(window)?.DataContext);
+        Assert.Equal([false, false, true], CloseButtons(window).Select(static button => button.IsVisible));
         Capture(window, "main-window-tabs.png");
 
-        CloseButtons(window)[1].Command!.Execute(results);
+        CloseButtons(window)[2].Command!.Execute(results);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(["Scan"], Headers(viewModel));
-        Assert.Same(viewModel.ScanTab, viewModel.SelectedTab);
-        Assert.True(window.FindControl<DockPanel>("ScanPage")!.IsVisible);
-        Assert.Empty(window.GetVisualDescendants().OfType<DuplicatesView>());
+        Assert.Equal(["Scan", "Duplicates"], Headers(viewModel));
+        Assert.Same(viewModel.DuplicatesTab, viewModel.SelectedTab);
+        Assert.Same(viewModel.DuplicatesTab, VisibleDuplicatesView(window)?.DataContext);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<DuplicatesView>(), view => ReferenceEquals(view.DataContext, results));
+        Assert.False(viewModel.CloseTabCommand.CanExecute(null));
+        window.Close();
+    }
+
+    /// <summary>
+    /// Before a scan, the Duplicates page is empty and says how it will fill; its buttons are there but disabled, and
+    /// Stop is hidden.
+    /// </summary>
+    [AvaloniaFact]
+    public void DuplicatesTab_BeforeAScan_IsEmpty()
+    {
+        var (window, viewModel) = Show(TestPlatforms.MacOS);
+
+        viewModel.SelectedTab = viewModel.DuplicatesTab;
+        Dispatcher.UIThread.RunJobs();
+
+        var page = VisibleDuplicatesView(window)!;
+        Assert.Same(viewModel.DuplicatesTab, page.DataContext);
+        var buttons = page.GetVisualDescendants().OfType<Button>().Where(static button => button.IsVisible).ToDictionary(static button => button.Name!, static button => button.IsEffectivelyEnabled);
+        Assert.Equal(
+            new Dictionary<string, bool>
+            {
+                ["SmallFilesButton"] = false,
+                ["SampledScanButton"] = false,
+                ["FullHashScanButton"] = false,
+                ["CopyButton"] = false,
+                ["ExportButton"] = false,
+            },
+            buttons);
+        Assert.Equal("Include Files of 1 MiB or Less\u2026", page.GetVisualDescendants().OfType<Button>().Single(static button => button.Name == "SmallFilesButton").Content);
+        var hint = page.GetVisualDescendants().OfType<TextBlock>().Single(static text => text.Name == "EmptyHintText");
+        Assert.True(hint.IsEffectivelyVisible);
+        Assert.StartsWith("Scan a volume or a folder", hint.Text, StringComparison.Ordinal);
+        Capture(window, "main-window-duplicates-empty.png");
+        window.Close();
+    }
+
+    /// <summary>
+    /// The tab strip runs along the bottom of the window, between the pages and the status bar, with the selected tab's
+    /// accent underneath its title.
+    /// </summary>
+    [AvaloniaFact]
+    public void TabStrip_SitsAboveTheStatusBar()
+    {
+        var (window, _) = Show(TestPlatforms.Windows);
+        var strip = window.GetVisualDescendants().OfType<TabStrip>().Single();
+        var page = window.FindControl<DockPanel>("ScanPage")!;
+        var statusBar = window.FindControl<DockPanel>("Frame")!.Children.OfType<Border>().Single(static border => border.Classes.Contains("statusbar"));
+
+        var stripTop = strip.TranslatePoint(default, window)!.Value.Y;
+        var stripBottom = strip.TranslatePoint(new Point(0, strip.Bounds.Height), window)!.Value.Y;
+        Assert.True(page.TranslatePoint(new Point(0, page.Bounds.Height), window)!.Value.Y <= stripTop);
+        Assert.True(stripBottom <= statusBar.TranslatePoint(default, window)!.Value.Y);
+        Assert.Equal(window.Bounds.Height, statusBar.TranslatePoint(new Point(0, statusBar.Bounds.Height), window)!.Value.Y, 1);
+        var pipes = strip.GetVisualDescendants().OfType<Border>().Where(static border => border.Name == "PART_SelectedPipe").ToList();
+        Assert.NotEmpty(pipes);
+        Assert.All(pipes, static pipe => Assert.Equal(VerticalAlignment.Bottom, pipe.VerticalAlignment));
         window.Close();
     }
 
@@ -83,7 +142,7 @@ public sealed class MainWindowTabsTests
         window.KeyRelease(Key.W, RawInputModifiers.Control, PhysicalKey.None, null);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(["Scan", "Duplicates in a"], Headers(viewModel));
+        Assert.Equal(["Scan", "Duplicates", "Duplicates in a"], Headers(viewModel));
         Assert.Same(first, viewModel.SelectedTab);
         Assert.True(first.IsSelected);
         Assert.False(viewModel.ScanTab.IsSelected);
@@ -91,7 +150,15 @@ public sealed class MainWindowTabsTests
         viewModel.SelectedTab = viewModel.ScanTab;
         viewModel.CloseTabCommand.Execute(first);
         Assert.Same(viewModel.ScanTab, viewModel.SelectedTab);
-        Assert.Equal(["Scan"], Headers(viewModel));
+        Assert.Equal(["Scan", "Duplicates"], Headers(viewModel));
+
+        // Ctrl+W on the Duplicates tab does nothing: it cannot be closed.
+        viewModel.SelectedTab = viewModel.DuplicatesTab;
+        window.KeyPress(Key.W, RawInputModifiers.Control, PhysicalKey.None, null);
+        window.KeyRelease(Key.W, RawInputModifiers.Control, PhysicalKey.None, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(["Scan", "Duplicates"], Headers(viewModel));
+        Assert.Same(viewModel.DuplicatesTab, viewModel.SelectedTab);
         window.Close();
     }
 
@@ -110,11 +177,11 @@ public sealed class MainWindowTabsTests
 
         var settings = Assert.Single(viewModel.Tabs.OfType<SettingsViewModel>());
         Assert.Same(settings, viewModel.SelectedTab);
-        Assert.Equal(["Scan", "Settings"], Headers(viewModel));
+        Assert.Equal(["Scan", "Duplicates", "Settings"], Headers(viewModel));
         Assert.True(window.GetVisualDescendants().OfType<SettingsView>().Single().IsVisible);
 
         viewModel.CloseTabCommand.Execute(null);
-        Assert.Equal(["Scan"], Headers(viewModel));
+        Assert.Equal(["Scan", "Duplicates"], Headers(viewModel));
         window.Close();
     }
 
@@ -139,7 +206,7 @@ public sealed class MainWindowTabsTests
             var (window, viewModel) = Show(TestPlatforms.MacOS);
             var results = Results(folder.FullName, "folder", new DuplicateSet(1, content.Length, null, paths, DuplicateComparison.Samples));
             viewModel.OpenTab(results);
-            var verifying = results.VerifyAllCommand.ExecuteAsync(null);
+            var verifying = results.FullHashScanCommand.ExecuteAsync(null);
             Assert.True(results.IsVerifying);
 
             viewModel.CloseTabCommand.Execute(results);
@@ -228,6 +295,14 @@ public sealed class MainWindowTabsTests
     /// <param name="viewModel">The view model.</param>
     /// <returns>The titles, in order.</returns>
     private static List<string> Headers(MainWindowViewModel viewModel) => [.. viewModel.Tabs.Select(static tab => tab.Header)];
+
+    /// <summary>
+    /// Finds the duplicates page shown, if any.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The visible page, or <see langword="null"/>.</returns>
+    private static DuplicatesView? VisibleDuplicatesView(Window window) =>
+        window.GetVisualDescendants().OfType<DuplicatesView>().SingleOrDefault(static view => view.IsEffectivelyVisible);
 
     /// <summary>
     /// Gets the tab strip's close buttons, in order.

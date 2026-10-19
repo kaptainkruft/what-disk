@@ -21,6 +21,12 @@ public enum DuplicateComparison
     /// compared.
     /// </summary>
     Samples,
+
+    /// <summary>
+    /// Only the lengths are equal, as recorded by the scan; the contents were not compared, so the files may well
+    /// differ.
+    /// </summary>
+    Size,
 }
 
 /// <summary>
@@ -30,7 +36,7 @@ public enum DuplicateComparison
 /// <param name="Length">The length of each file in bytes.</param>
 /// <param name="Hash">
 /// The contents' XXH128 hash as 32 lower-case hexadecimal digits, or <see langword="null"/> when the files were only
-/// sampled.
+/// sampled or only their lengths compared.
 /// </param>
 /// <param name="Paths">The files' paths, sorted; always at least two.</param>
 /// <param name="Comparison">How the files were compared.</param>
@@ -98,7 +104,7 @@ public sealed record DuplicateProgress(DuplicateSearchStage Stage, int FilesDone
 /// The outcome of a duplicate search.
 /// </summary>
 /// <param name="Sets">The sets of duplicates, largest waste first.</param>
-/// <param name="FilesConsidered">The non-empty files that were grouped by length.</param>
+/// <param name="FilesConsidered">The files over the minimum length that were grouped by length.</param>
 /// <param name="SizeMatches">The files that share their length with another file.</param>
 /// <param name="HashedFiles">The files up to <see cref="DuplicateFinderOptions.FullHashLimit"/> that were hashed.</param>
 /// <param name="SampledFiles">The larger files that were compared by samples.</param>
@@ -106,6 +112,9 @@ public sealed record DuplicateProgress(DuplicateSearchStage Stage, int FilesDone
 /// <param name="OfflineFiles">The files stored only in the cloud, which were left out so as not to download them.</param>
 /// <param name="HardLinks">The extra hard links to files already compared, which were left out.</param>
 /// <param name="Failures">The files that could not be read or changed during the search.</param>
+/// <param name="SmallFiles">
+/// The non-empty files no longer than <see cref="DuplicateFinderOptions.MinimumLength"/>, which were left out.
+/// </param>
 public sealed record DuplicateSearchResult(
     IReadOnlyList<DuplicateSet> Sets,
     int FilesConsidered,
@@ -115,7 +124,8 @@ public sealed record DuplicateSearchResult(
     int EmptyFiles,
     int OfflineFiles,
     int HardLinks,
-    IReadOnlyList<DuplicateFailure> Failures)
+    IReadOnlyList<DuplicateFailure> Failures,
+    int SmallFiles = 0)
 {
     /// <summary>
     /// Gets the number of files in all the sets.

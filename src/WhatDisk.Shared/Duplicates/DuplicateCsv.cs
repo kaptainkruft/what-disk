@@ -5,9 +5,9 @@ namespace WhatDisk.Duplicates;
 
 /// <summary>
 /// Writes duplicate sets as CSV (RFC 4180): a header row, then one row per file with its set number, full path,
-/// length in bytes, hash (empty for sampled files) and how it was compared ("Hash" or "Sampled"). Rows end with
-/// CR LF, and fields that contain a comma, quote or line break are quoted. The same text is copied to the clipboard
-/// and written to files.
+/// length in bytes, hash (empty for sampled files and size-only matches) and how it was compared ("Hash", "Sampled" or
+/// "Size"). Rows end with CR LF, and fields that contain a comma, quote or line break are quoted. The same text is
+/// copied to the clipboard and written to files.
 /// </summary>
 public static class DuplicateCsv
 {
@@ -46,11 +46,16 @@ public static class DuplicateCsv
     }
 
     /// <summary>
-    /// Names how a set was compared, as in the Comparison column: "Hash" or "Sampled".
+    /// Names how a set was compared, as in the Comparison column: "Hash", "Sampled" or "Size".
     /// </summary>
     /// <param name="comparison">How the set was compared.</param>
     /// <returns>The name.</returns>
-    public static string ComparisonName(DuplicateComparison comparison) => comparison == DuplicateComparison.Hash ? "Hash" : "Sampled";
+    public static string ComparisonName(DuplicateComparison comparison) => comparison switch
+    {
+        DuplicateComparison.Hash => "Hash",
+        DuplicateComparison.Samples => "Sampled",
+        _ => "Size",
+    };
 
     /// <summary>
     /// Quotes a field when it contains a comma, quote, line break, or leading or trailing space, doubling any quotes.

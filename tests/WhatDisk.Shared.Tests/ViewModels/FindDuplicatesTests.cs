@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 using WhatDisk.Tests.Fakes;
 using WhatDisk.ViewModels;
 using WhatDisk.Views;
@@ -11,7 +12,8 @@ using WhatDisk.Views;
 namespace WhatDisk.Tests.ViewModels;
 
 /// <summary>
-/// Tests Tools › Find Duplicates on a real scan of a temporary directory.
+/// Tests Tools › Find Duplicates on a real scan of a temporary directory. The files are small, so the Duplicates tab
+/// lists files of every length.
 /// </summary>
 public sealed class FindDuplicatesTests : IDisposable
 {
@@ -60,6 +62,7 @@ public sealed class FindDuplicatesTests : IDisposable
         {
             PathText = _temp.FullName,
         };
+        _viewModel.Settings.Set(SettingsCatalog.Duplicates.EstimateOverMiB, 0);
     }
 
     /// <inheritdoc/>
@@ -72,8 +75,8 @@ public sealed class FindDuplicatesTests : IDisposable
     }
 
     /// <summary>
-    /// Find Duplicates is disabled until a scan has finished; it then shows the identical files in the Duplicates
-    /// window and summarises them in the status bar, whatever has focus.
+    /// Find Duplicates in Scanned Files is disabled until a scan has finished; it then shows the Duplicates tab with the
+    /// identical files, without opening another tab, and summarises them in the status bar, whatever has focus.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
@@ -86,7 +89,9 @@ public sealed class FindDuplicatesTests : IDisposable
 
         await _viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        var results = Assert.Single(_viewModel.DuplicateTabs());
+        Assert.Empty(_viewModel.DuplicateTabs());
+        var results = _viewModel.DuplicatesTab;
+        Assert.Same(results, _viewModel.SelectedTab);
         var set = Assert.Single(results.Result.Sets);
         Assert.Equal([PathOf("backup/beach copy.jpg"), PathOf("photos/beach.jpg")], set.Paths);
         Assert.Equal(3, results.Result.SizeMatches);
@@ -125,7 +130,7 @@ public sealed class FindDuplicatesTests : IDisposable
     }
 
     /// <summary>
-    /// Without duplicates the window still opens, saying so, and the status bar says how many files were compared.
+    /// Without duplicates the Duplicates tab says so, and the status bar says how many files were compared.
     /// </summary>
     /// <returns>A task that completes when the test has finished.</returns>
     [AvaloniaFact]
@@ -136,7 +141,8 @@ public sealed class FindDuplicatesTests : IDisposable
 
         await _viewModel.FindDuplicatesInScanCommand.ExecuteAsync(null);
 
-        Assert.Empty(Assert.Single(_viewModel.DuplicateTabs()).Rows);
+        Assert.Empty(_viewModel.DuplicatesTab.Rows);
+        Assert.Equal("No duplicate files found.", _viewModel.DuplicatesTab.Summary);
         Assert.Equal("No duplicates among 3 files", _viewModel.StatusText);
     }
 
@@ -179,7 +185,7 @@ public sealed class FindDuplicatesTests : IDisposable
 
         Assert.False(_viewModel.IsFindingDuplicates);
         Assert.All(controls, static control => Assert.True(control.IsEffectivelyEnabled));
-        Assert.Single(_viewModel.DuplicateTabs());
+        Assert.Single(_viewModel.DuplicatesTab.Sets);
         window.Close();
     }
 

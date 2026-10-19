@@ -19,9 +19,10 @@ namespace WhatDisk.Duplicates;
 /// the end, and files whose samples are all equal form a set matched by <see cref="DuplicateComparison.Samples"/>.
 /// Such a set can be confirmed later with <see cref="VerifyAsync"/>.</item>
 /// </list>
-/// Empty files, files stored only in the cloud (reading them would download them) and extra hard links to a file
-/// already compared are left out. Files that cannot be read, or whose length changed since the scan, are reported as
-/// failures and left out.
+/// Empty files, files no longer than <see cref="DuplicateFinderOptions.MinimumLength"/>, files stored only in the cloud
+/// (reading them would download them) and extra hard links to a file already compared are left out. Files that cannot
+/// be read, or whose length changed since the scan, are reported as failures and left out. <see cref="GroupBySize"/>
+/// stops after the first step, without reading anything.
 /// </summary>
 public sealed class DuplicateFinder
 {
@@ -74,7 +75,35 @@ public sealed class DuplicateFinder
     {
         ArgumentNullException.ThrowIfNull(roots);
         var state = new SearchState(progress);
-        return Task.Run(() => CompareAsync(GroupTree([.. roots], state, cancellationToken), state, cancellationToken), cancellationToken);
+        return Task.Run(() => CompareAsync(GroupTree([.. roots], Options.MinimumLength, state, cancellationToken), state, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Groups the files of scanned trees by length, from the scan alone, without reading any file: each set holds
+    /// files that share a length (<see cref="DuplicateComparison.Size"/>), largest waste first. Safe to call while the
+    /// trees are still being scanned, on any thread.
+    /// </summary>
+    /// <param name="roots">The top-level items of the scan.</param>
+    /// <param name="cancellationToken">Stops the grouping.</param>
+    /// <returns>The sets of files that share a length.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    public DuplicateSearchResult GroupBySize(IEnumerable<FileSystemNode> roots, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(roots);
+        var state = new SearchState(null);
+        var groups = GroupTree([.. roots], Options.MinimumLength, state, cancellationToken);
+        var sets = NumberSets(groups.Select(static group => (group[0].Length, (UInt128?)null, DuplicateComparison.Size, SortPaths(group.Select(static file => file.Path)))));
+        return new DuplicateSearchResult(
+            sets,
+            state.FilesConsidered,
+            groups.Sum(static group => group.Count),
+            0,
+            0,
+            state.EmptyFiles,
+            state.OfflineFiles,
+            state.HardLinks,
+            [],
+            state.SmallFiles);
     }
 
     /// <summary>
@@ -95,6 +124,12 @@ public sealed class DuplicateFinder
             if (candidate.Length <= 0)
             {
                 state.EmptyFiles++;
+                continue;
+            }
+
+            if (candidate.Length <= Options.MinimumLength)
+            {
+                state.SmallFiles++;
                 continue;
             }
 
@@ -255,10 +290,11 @@ public sealed class DuplicateFinder
     /// than one file.
     /// </summary>
     /// <param name="roots">The top-level items.</param>
+    /// <param name="minimumLength">The length files must exceed to be grouped.</param>
     /// <param name="state">Counts what is left out and reports progress.</param>
     /// <param name="cancellationToken">Stops the listing.</param>
     /// <returns>The groups.</returns>
-    private static List<List<DuplicateCandidate>> GroupTree(FileSystemNode[] roots, SearchState state, CancellationToken cancellationToken)
+    private static List<List<DuplicateCandidate>> GroupTree(FileSystemNode[] roots, long minimumLength, SearchState state, CancellationToken cancellationToken)
     {
         state.Begin(DuplicateSearchStage.Grouping, 0);
         var groups = new Dictionary<long, List<FileNode>>();
@@ -289,6 +325,10 @@ public sealed class DuplicateFinder
                 else if (file.LogicalSize <= 0)
                 {
                     state.EmptyFiles++;
+                }
+                else if (file.LogicalSize <= minimumLength)
+                {
+                    state.SmallFiles++;
                 }
                 else if ((file.Attributes & EntryAttributes.Offline) != 0)
                 {
@@ -434,13 +474,7 @@ public sealed class DuplicateFinder
         });
         state.Report(force: true);
 
-        var sets = matches
-            .Select(static match => (match.Files[0].Length, match.Files[0].Hash, match.Comparison, Paths: SortPaths(match.Files.Select(static file => file.Path))))
-            .OrderByDescending(static set => set.Length * (set.Paths.Length - 1))
-            .ThenByDescending(static set => set.Length)
-            .ThenBy(static set => set.Paths[0], StringComparer.Ordinal)
-            .Select(static (set, index) => new DuplicateSet(index + 1, set.Length, set.Hash is { } hash ? FormatHash(hash) : null, set.Paths, set.Comparison))
-            .ToArray();
+        var sets = NumberSets(matches.Select(static match => (match.Files[0].Length, match.Files[0].Hash, match.Comparison, SortPaths(match.Files.Select(static file => file.Path)))));
         return new DuplicateSearchResult(
             sets,
             state.FilesConsidered,
@@ -450,8 +484,24 @@ public sealed class DuplicateFinder
             state.EmptyFiles,
             state.OfflineFiles,
             state.HardLinks,
-            [.. state.Failures.OrderBy(static failure => failure.Path, StringComparer.Ordinal)]);
+            [.. state.Failures.OrderBy(static failure => failure.Path, StringComparer.Ordinal)],
+            state.SmallFiles);
     }
+
+    /// <summary>
+    /// Orders sets by the space they waste, largest first (then by length and first path, so the order is stable), and
+    /// numbers them from 1.
+    /// </summary>
+    /// <param name="sets">The sets: each file's length, the hash when hashed, the comparison and the sorted paths.</param>
+    /// <returns>The numbered sets.</returns>
+    private static DuplicateSet[] NumberSets(IEnumerable<(long Length, UInt128? Hash, DuplicateComparison Comparison, string[] Paths)> sets) =>
+    [
+        .. sets
+            .OrderByDescending(static set => set.Length * (set.Paths.Length - 1))
+            .ThenByDescending(static set => set.Length)
+            .ThenBy(static set => set.Paths[0], StringComparer.Ordinal)
+            .Select(static (set, index) => new DuplicateSet(index + 1, set.Length, set.Hash is { } hash ? FormatHash(hash) : null, set.Paths, set.Comparison)),
+    ];
 
     /// <summary>
     /// Lists the files of one length group to read, leaving out a file listed twice and hard links to a file already
@@ -616,6 +666,9 @@ public sealed class DuplicateFinder
         /// <summary>The empty files left out.</summary>
         public int EmptyFiles;
 
+        /// <summary>The files no longer than the minimum length left out.</summary>
+        public int SmallFiles;
+
         /// <summary>The cloud-only files left out.</summary>
         public int OfflineFiles;
 
@@ -753,6 +806,25 @@ public sealed record DuplicateFinderOptions
     } = 4096;
 
     /// <summary>
+    /// Gets the length, in bytes, that files must exceed to be compared; files no longer than this are left out.
+    /// Zero (the default) compares every non-empty file.
+    /// </summary>
+    public long MinimumLength
+    {
+        get;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            field = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets the minimum length for display, such as "1 MiB".
+    /// </summary>
+    public string MinimumLengthText => DescribeBinarySize(MinimumLength);
+
+    /// <summary>
     /// Gets the hashing limit for display, such as "1 MiB".
     /// </summary>
     public string HashLimitText => DescribeBinarySize(FullHashLimit);
@@ -782,7 +854,7 @@ public sealed record DuplicateFinderOptions
     /// </summary>
     /// <param name="bytes">The size.</param>
     /// <returns>The description.</returns>
-    private static string DescribeBinarySize(long bytes) => bytes switch
+    internal static string DescribeBinarySize(long bytes) => bytes switch
     {
         0 => "0 bytes",
         _ when bytes % (1024 * 1024) == 0 => string.Create(CultureInfo.CurrentCulture, $"{bytes / (1024 * 1024):N0} MiB"),

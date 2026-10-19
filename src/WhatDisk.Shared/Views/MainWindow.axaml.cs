@@ -8,8 +8,9 @@ namespace WhatDisk.Views;
 
 /// <summary>
 /// The single application window. Its tabs hold the scan (a toolbar to choose what to scan, the results tree, the chart
-/// and details panes), the results of each duplicate search and the settings; a status bar runs along the bottom, and
-/// questions and the About box appear over the window rather than in windows of their own. Keeping everything in one
+/// and details panes), the duplicates among the scanned files, the results of each search of the selection and the
+/// settings; the tab strip and a status bar run along the bottom, and questions and the About box appear over the
+/// window rather than in windows of their own. Keeping everything in one
 /// window means the macOS menu bar never switches between windows' menus, which Avalonia does unreliably on macOS 27.
 /// On macOS its menus appear in the menu bar.
 /// </summary>

@@ -122,7 +122,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _dialogs = dialogs ?? new DecliningDialogService();
         _dialogs.IsShowingChanged += OnDialogShowingChanged;
         ScanTab = new ScanTabViewModel { IsSelected = true };
-        Tabs = [ScanTab];
+        DuplicatesTab = new DuplicateResultsViewModel(_sizes, _shell, platform.FileManagerName, this);
+        Tabs = [ScanTab, DuplicatesTab];
         _selectedTab = ScanTab;
         _enumerator = enumerator ?? new ManagedFileSystemEnumerator();
         _transfer = new FileTransfer(platform.PathComparison);
@@ -333,6 +334,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         UpdateChart();
         UpdateDetails();
+        UpdateDuplicates();
     }
 
     /// <summary>
@@ -553,6 +555,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Tree.Clear();
         Chart.Clear();
         PotentialDuplicates.Clear();
+        ResetDuplicates();
         Details.Show(null, 0, isScanRunning: true);
         IsScanning = true;
         Refresh();

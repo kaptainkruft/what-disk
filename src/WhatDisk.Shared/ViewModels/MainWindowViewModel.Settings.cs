@@ -116,7 +116,7 @@ public sealed partial class MainWindowViewModel
     /// <summary>
     /// Applies a changed setting that affects what is on screen: new size units re-format every size in the tree,
     /// chart, details, potential duplicate space and volume list, and a new minimum length re-estimates the potential
-    /// duplicate space.
+    /// duplicate space and lists the files that share a size in the Duplicates tab again.
     /// </summary>
     /// <param name="sender">The settings.</param>
     /// <param name="setting">The setting that changed.</param>
@@ -137,6 +137,7 @@ public sealed partial class MainWindowViewModel
         {
             _potentialDuplicateTotals = CreatePotentialDuplicateAggregator();
             _chartedScope = default;
+            ResetDuplicates();
             Refresh();
         }
     }

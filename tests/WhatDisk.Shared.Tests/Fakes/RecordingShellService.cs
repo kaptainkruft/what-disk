@@ -63,6 +63,10 @@ internal sealed class RecordingShellService : IShellService
     /// <inheritdoc/>
     public void CopyText(string text) => Record("copy text", [text]);
 
+    /// <inheritdoc/>
+    public void ShowSystemMenu(IReadOnlyList<string> paths, SystemMenuAnchor anchor) =>
+        Record(anchor.ExtendedVerbs ? "system menu (extended)" : "system menu", paths);
+
     /// <summary>
     /// Records a request.
     /// </summary>

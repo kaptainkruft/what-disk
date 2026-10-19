@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 namespace WhatDisk.Windows.Interop;
 
 /// <summary>
-/// Bindings to the clipboard, window and icon functions of user32.
+/// Bindings to the clipboard, window, menu and icon functions of user32.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static unsafe partial class User32
@@ -17,6 +17,24 @@ internal static unsafe partial class User32
 
     /// <summary>The clipboard format for a list of files (a <c>DROPFILES</c> structure).</summary>
     public const uint FileDropFormat = 15;
+
+    /// <summary>Sent to a menu's owner when a submenu is about to open (<c>WM_INITMENUPOPUP</c>).</summary>
+    public const uint InitMenuPopupMessage = 0x0117;
+
+    /// <summary>Sent to a menu's owner to draw an owner-drawn item (<c>WM_DRAWITEM</c>).</summary>
+    public const uint DrawItemMessage = 0x002B;
+
+    /// <summary>Sent to a menu's owner to measure an owner-drawn item (<c>WM_MEASUREITEM</c>).</summary>
+    public const uint MeasureItemMessage = 0x002C;
+
+    /// <summary>Sent to a menu's owner when a key matches no item's access key (<c>WM_MENUCHAR</c>).</summary>
+    public const uint MenuCharMessage = 0x0120;
+
+    /// <summary>Makes <see cref="TrackPopupMenuEx"/> return the chosen command instead of posting it (<c>TPM_RETURNCMD</c>).</summary>
+    public const uint TrackReturnCommand = 0x0100;
+
+    /// <summary>Lets the right mouse button choose items too (<c>TPM_RIGHTBUTTON</c>).</summary>
+    public const uint TrackRightButton = 0x0002;
 
     /// <summary>
     /// Opens the clipboard for changes.
@@ -95,6 +113,52 @@ internal static unsafe partial class User32
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DestroyWindow(nint window);
+
+    /// <summary>
+    /// Creates an empty pop-up menu.
+    /// </summary>
+    /// <returns>The menu (destroy it with <see cref="DestroyMenu"/>), or zero.</returns>
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint CreatePopupMenu();
+
+    /// <summary>
+    /// Destroys a menu and its submenus.
+    /// </summary>
+    /// <param name="menu">The menu.</param>
+    /// <returns><see langword="true"/> on success.</returns>
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool DestroyMenu(nint menu);
+
+    /// <summary>
+    /// Shows a pop-up menu and waits until it closes.
+    /// </summary>
+    /// <param name="menu">The menu.</param>
+    /// <param name="flags">Options (<see cref="TrackReturnCommand"/>, <see cref="TrackRightButton"/>).</param>
+    /// <param name="x">The menu's left edge, in screen pixels.</param>
+    /// <param name="y">The menu's top edge, in screen pixels.</param>
+    /// <param name="window">The window that owns the menu and receives its messages.</param>
+    /// <param name="parameters">An area the menu must not cover, or zero.</param>
+    /// <returns>With <see cref="TrackReturnCommand"/>, the chosen command's identifier, or zero.</returns>
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial int TrackPopupMenuEx(nint menu, uint flags, int x, int y, nint window, nint parameters);
+
+    /// <summary>
+    /// Counts a menu's items.
+    /// </summary>
+    /// <param name="menu">The menu.</param>
+    /// <returns>The number of items, or -1.</returns>
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial int GetMenuItemCount(nint menu);
+
+    /// <summary>
+    /// Gets the command identifier of a menu item.
+    /// </summary>
+    /// <param name="menu">The menu.</param>
+    /// <param name="position">The item's position.</param>
+    /// <returns>The identifier, or <see cref="uint.MaxValue"/> for a submenu or an invalid position.</returns>
+    [LibraryImport("user32.dll")]
+    public static partial uint GetMenuItemID(nint menu, int position);
 
     /// <summary>
     /// Destroys an icon.

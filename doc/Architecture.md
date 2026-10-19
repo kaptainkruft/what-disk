@@ -11,7 +11,7 @@ the operating system:
 | `IVolumeService` | List volumes and capture the mount table | `MacVolumeService` (`DriveInfo` + `getattrlist`) | `WindowsVolumeService` (`FindFirstVolume`, `GetVolumePathNamesForVolumeName`) |
 | `IIconProvider` | Platform icons for items and volumes | `MacIconProvider` (`NSWorkspace`) | `WindowsIconProvider` (`SHGetFileInfo`) |
 | `IFileTypeProvider` | Which folders are single items (packages) and how types are described | `MacFileTypeProvider` (uniform type identifiers) | `WindowsFileTypeProvider` (registered type names) |
-| `IShellService` | Trash, open, Open With, reveal, information window, preview, clipboard | `MacShellService` (`NSWorkspace`, `NSFileManager`, `NSPasteboard`) | `WindowsShellService` (`SHFileOperation`, `SHAssocEnumHandlers`, `SHOpenFolderAndSelectItems`, `SHObjectProperties`, the clipboard) |
+| `IShellService` | Trash, open, Open With, reveal, information window, preview, clipboard, the system's context menu | `MacShellService` (`NSWorkspace`, `NSFileManager`, `NSPasteboard`) | `WindowsShellService` (`SHFileOperation`, `SHAssocEnumHandlers`, `SHOpenFolderAndSelectItems`, `SHObjectProperties`, the clipboard, `IContextMenu`) |
 | `PlatformCapabilities` | Conventions: volumes per scan, path comparison, byte units, the file manager's words, the shortcut scheme, whether there is an application menu | macOS values | Windows values |
 
 The head registers these with `Microsoft.Extensions.DependencyInjection` before the shared defaults, which only fill in
@@ -21,7 +21,16 @@ on macOS, `UseWin32().UseSkia().UseHarfBuzz()` on Windows), so each head ships o
 The context menu and menus are shared: one set of actions, named and bound to keys by `PlatformCapabilities`
 (`ShortcutScheme.MacOS` or `ShortcutScheme.Windows`, "Finder" or "File Explorer", "Trash" or "Recycle Bin", "Get
 Info" or "Properties"), and backed by the head's `IShellService`. Actions a platform lacks (Quick Look on Windows) are
-hidden. The system's own context menu is not used on either platform.
+hidden.
+
+The system's own context menu is not used, except on Windows when **Offer the full Windows context menu** is on
+(General settings, off by default). The tree's menu then ends with **Show More Options**, as File Explorer's does on
+Windows 11, which opens File Explorer's full (classic) menu for the selection at the same place, and Shift+right-click
+opens that menu directly, with the commands Windows shows only with Shift held. It needs the selected items to be in
+one folder, as in File Explorer. Changes made through it (deleting, say) show after a rescan, as changes made in File
+Explorer do. macOS has no public way for another app to show the Finder's context menu, and the pieces AppKit offers
+(Services, Share) would mean either altering Avalonia's own views or assembling another menu of the app's, so the
+setting is Windows-only.
 
 ### One window, with tabs
 
@@ -223,8 +232,9 @@ the defaults, so a default changed in a later version reaches everyone who has n
   The JSON is handled with `System.Text.Json.Nodes`, which needs no reflection, so the Native AOT builds read it too.
 - **Applying.** Theme and size units apply at once: the app switches its theme variant, and the tree, chart, details
   and volume list re-format every size. Other settings are read when next needed: scan threads and the network rule
-  at the next scan, the duplicate options at the next search, confirmation thresholds at the next delete, and the
-  macOS volume list and Windows Recycle Bin flags by the platform services.
+  at the next scan, the duplicate options at the next search, confirmation thresholds at the next delete, the
+  Windows context menu option each time the tree's menu opens, and the macOS volume list and Windows Recycle Bin flags
+  by the platform services.
 - **Tab.** Settings is in the application menu on macOS (⌘,) and in Tools on Windows (Ctrl+,), and opens in a tab.
   It has the sections down the left, and for each setting its label, description, path in the file, an editor, and
   Reset when it differs from the default (marked by an accent bar). Changes apply at once, so there is no OK or
@@ -248,10 +258,17 @@ the defaults, so a default changed in a later version reaches everyone who has n
   after their share (`media (\\nas) (Z:)`), and `subst` drives are partial views of the volume they point into.
 - Icons and type names come from the shell (`SHGetFileInfo`, with the 48 and 256 pixel system image lists on high-DPI
   screens) on background threads. Shell calls that show windows run in a single-threaded apartment, and the few COM
-  interfaces used (`IAssocHandler`, `IImageList`) are called through their virtual tables, which keeps the head free of
-  runtime-generated COM wrappers and compatible with Native AOT.
+  interfaces used (`IAssocHandler`, `IImageList`, `IShellFolder`, `IContextMenu`) are called through their virtual
+  tables, which keeps the head free of runtime-generated COM wrappers and compatible with Native AOT.
 - Move to Recycle Bin uses `SHFileOperation` with undo, so items can be restored. Copy puts a file list on the clipboard
   that File Explorer pastes.
+- File Explorer's context menu is hosted as its documentation describes: the parent folder's
+  `IShellFolder::GetUIObjectOf` gives the items' `IContextMenu`, which fills a pop-up menu (without Rename, which needs
+  File Explorer's own view) that `TrackPopupMenuEx` shows on the UI thread, owned by the main window, and
+  `InvokeCommand` runs the command chosen. While it is open, the window passes the menu's messages (`WM_INITMENUPOPUP`,
+  `WM_DRAWITEM`, `WM_MEASUREITEM`, `WM_MENUCHAR`) to `IContextMenu3` or `IContextMenu2` through Avalonia's
+  `Win32Properties.AddWndProcHookCallback`, so that submenus such as Send To fill in and show their icons. Windows 11's
+  newer menu belongs to File Explorer and is not available to other apps.
 
 ### macOS specifics
 

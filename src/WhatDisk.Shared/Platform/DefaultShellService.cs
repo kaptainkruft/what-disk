@@ -51,4 +51,8 @@ public class DefaultShellService : IShellService
     /// <inheritdoc/>
     public virtual void CopyText(string text) =>
         throw new NotSupportedException("Copying text is not supported on this platform.");
+
+    /// <inheritdoc/>
+    public virtual void ShowSystemMenu(IReadOnlyList<string> paths, SystemMenuAnchor anchor) =>
+        throw new NotSupportedException("The system's context menu is not available on this platform.");
 }

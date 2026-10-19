@@ -4,7 +4,8 @@ using System.Runtime.Versioning;
 namespace WhatDisk.Windows.Interop;
 
 /// <summary>
-/// Bindings to COM initialisation in ole32, file-association queries in shlwapi and network drive queries in mpr.
+/// Bindings to COM and OLE initialisation in ole32, file-association queries in shlwapi and network drive queries in
+/// mpr.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static unsafe partial class Ole32
@@ -38,6 +39,21 @@ internal static unsafe partial class Ole32
     /// </summary>
     [LibraryImport("ole32.dll")]
     public static partial void CoUninitialize();
+
+    /// <summary>
+    /// Initialises OLE on the calling thread, as the OLE clipboard needs; the thread must be (or become) a
+    /// single-threaded apartment.
+    /// </summary>
+    /// <param name="reserved">Zero.</param>
+    /// <returns>S_OK, S_FALSE when already initialised, or an error.</returns>
+    [LibraryImport("ole32.dll")]
+    public static partial int OleInitialize(nint reserved);
+
+    /// <summary>
+    /// Balances a successful <see cref="OleInitialize"/>.
+    /// </summary>
+    [LibraryImport("ole32.dll")]
+    public static partial void OleUninitialize();
 
     /// <summary>
     /// Looks up a file association, such as the application that opens an extension.

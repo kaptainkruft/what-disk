@@ -4,11 +4,13 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 using WhatDisk.Tests.Fakes;
 using WhatDisk.ViewModels;
 using WhatDisk.Views;
@@ -305,6 +307,58 @@ public sealed class TreeInteractionTests : IDisposable
     }
 
     /// <summary>
+    /// With the full Windows context menu turned on, the context menu ends with Show More Options, which opens the
+    /// system's menu for the selection once the list's menu has closed; it is disabled for items in different folders.
+    /// Shift+right-click then opens the system's menu, with the extended commands, instead of the list's. With the
+    /// setting off, the menu is unchanged and Shift+right-click opens the list's menu.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task SystemMenu_FollowsTheSetting()
+    {
+        _shell.Capabilities |= ShellCapabilities.SystemMenu;
+        var (window, viewModel) = await ShowAsync(TestPlatforms.Windows);
+        var a = Row(viewModel, "a.txt");
+        Focus(window, a);
+        var menu = Assert.IsType<ContextMenu>(List(window).ContextMenu);
+
+        Press(window, Key.F10, RawInputModifiers.Shift);
+        Assert.True(menu.IsOpen);
+        Assert.DoesNotContain("Show More Options", VisibleHeaders(menu));
+        menu.Close();
+        Click(window, a, RawInputModifiers.Shift, MouseButton.Right);
+        Assert.True(menu.IsOpen);
+        menu.Close();
+
+        viewModel.Settings.Set(SettingsCatalog.General.SystemContextMenu, true);
+        Press(window, Key.F10, RawInputModifiers.Shift);
+        Assert.Equal("Show More Options", VisibleHeaders(menu)[^1]);
+        var showMore = menu.Items.OfType<MenuItem>().Single(static item => item.Header as string == "Show More Options");
+        Assert.True(showMore.IsEnabled);
+        showMore.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Empty(_shell.Calls);
+        menu.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal([$"system menu: {PathOf("a.txt")}"], _shell.Calls);
+
+        var c = Row(viewModel, "b/c.txt");
+        viewModel.Selection.Clear();
+        viewModel.Selection.Select(viewModel.Tree.IndexOf(a));
+        viewModel.Selection.Select(viewModel.Tree.IndexOf(c));
+        Dispatcher.UIThread.RunJobs();
+        Press(window, Key.F10, RawInputModifiers.Shift);
+        Assert.True(menu.IsOpen);
+        Assert.False(showMore.IsEnabled);
+        menu.Close();
+
+        viewModel.SelectedRow = a;
+        Dispatcher.UIThread.RunJobs();
+        Click(window, a, RawInputModifiers.Shift, MouseButton.Right);
+        Assert.False(menu.IsOpen);
+        Assert.Equal($"system menu (extended): {PathOf("a.txt")}", _shell.Calls[^1]);
+    }
+
+    /// <summary>
     /// The window's menus are declared once, as Avalonia's documentation describes, and the same on every platform:
     /// File, Edit, View and Tools in the platform's words with its shortcuts (Find Duplicates enabled after the scan),
     /// and nothing changes them afterwards. Items for one platform are hidden on the other: Exit, Settings in Tools and
@@ -487,6 +541,14 @@ public sealed class TreeInteractionTests : IDisposable
     /// <param name="modifiers">The modifiers.</param>
     /// <returns>The raw modifiers.</returns>
     private static RawInputModifiers ToRaw(KeyModifiers modifiers) => (RawInputModifiers)(int)modifiers;
+
+    /// <summary>
+    /// Gets the headers of a menu's visible items.
+    /// </summary>
+    /// <param name="menu">The menu.</param>
+    /// <returns>The headers, in order.</returns>
+    private static List<string?> VisibleHeaders(ContextMenu menu) =>
+        [.. menu.Items.OfType<MenuItem>().Where(static item => item.IsVisible).Select(static item => item.Header as string)];
 
     /// <summary>
     /// Finds the tree's list.

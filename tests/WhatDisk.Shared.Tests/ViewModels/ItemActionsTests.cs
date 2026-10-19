@@ -1,7 +1,10 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using WhatDisk.FileOperations;
 using WhatDisk.Platform;
 using WhatDisk.Scanning;
+using WhatDisk.Settings;
 using WhatDisk.Tests.Fakes;
 using WhatDisk.ViewModels;
 
@@ -219,6 +222,40 @@ public sealed class ItemActionsTests : IDisposable
         Assert.StartsWith("open with TextEdit: ", _shell.Calls[2], StringComparison.Ordinal);
         Assert.Equal("Copied 2 paths to the clipboard", viewModel.StatusText);
         Assert.Equal("3 items", viewModel.Details.Title);
+    }
+
+    /// <summary>
+    /// The system's context menu is offered only where the platform has one and the setting is on, and only for items
+    /// in one folder (counting just the topmost of nested items); it receives the selected paths and where to open.
+    /// </summary>
+    /// <returns>A task that completes when the test has finished.</returns>
+    [AvaloniaFact]
+    public async Task SystemMenu_NeedsTheSettingAndItemsInOneFolder()
+    {
+        var viewModel = await ScanAsync(TestPlatforms.Windows);
+        viewModel.Settings.Set(SettingsCatalog.General.SystemContextMenu, true);
+        Select(viewModel, "b/c.txt");
+        Assert.False(viewModel.IsSystemMenuOffered);
+
+        _shell.Capabilities |= ShellCapabilities.SystemMenu;
+        Assert.True(viewModel.IsSystemMenuOffered);
+        Assert.True(viewModel.CanShowSystemMenu());
+        viewModel.Settings.Set(SettingsCatalog.General.SystemContextMenu, false);
+        Assert.False(viewModel.IsSystemMenuOffered);
+        Assert.False(viewModel.CanShowSystemMenu());
+        viewModel.Settings.Set(SettingsCatalog.General.SystemContextMenu, true);
+
+        Select(viewModel, "a.txt", "b/c.txt");
+        Assert.False(viewModel.CanShowSystemMenu());
+        viewModel.ShowSystemMenu(new SystemMenuAnchor(new Window(), new PixelPoint(10, 20), ExtendedVerbs: false));
+        Assert.Empty(_shell.Calls);
+
+        Select(viewModel, "a.txt", "b", "b/c.txt");
+        Assert.True(viewModel.CanShowSystemMenu());
+        viewModel.ShowSystemMenu(new SystemMenuAnchor(new Window(), new PixelPoint(10, 20), ExtendedVerbs: true));
+        var shown = Assert.Single(_shell.Calls);
+        Assert.StartsWith("system menu (extended): ", shown, StringComparison.Ordinal);
+        Assert.Equal([PathOf("a.txt"), PathOf("b")], shown["system menu (extended): ".Length..].Split('|').Order(StringComparer.Ordinal));
     }
 
     /// <summary>

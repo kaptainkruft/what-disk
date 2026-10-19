@@ -4,8 +4,8 @@ using System.Runtime.Versioning;
 namespace WhatDisk.Windows.Interop;
 
 /// <summary>
-/// Bindings to the Windows shell: the Recycle Bin, File Explorer windows, Properties, file icons and type names, and
-/// the applications registered for a file type.
+/// Bindings to the Windows shell: the Recycle Bin, File Explorer windows, Properties, file icons and type names, the
+/// applications registered for a file type, and items' context menus.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static unsafe partial class Shell32
@@ -60,6 +60,24 @@ internal static unsafe partial class Shell32
 
     /// <summary>Lists the applications recommended for a file type.</summary>
     public const int AssocFilterRecommended = 0x1;
+
+    /// <summary>The <c>IContextMenu::QueryContextMenu</c> flags for an ordinary context menu (<c>CMF_NORMAL</c>).</summary>
+    public const uint ContextMenuNormal = 0x0;
+
+    /// <summary>Adds the commands normally shown only with Shift held, such as Copy as path (<c>CMF_EXTENDEDVERBS</c>).</summary>
+    public const uint ContextMenuExtendedVerbs = 0x100;
+
+    /// <summary>The <see cref="CommandInvokeInfo"/> holds UTF-16 strings (<c>CMIC_MASK_UNICODE</c>).</summary>
+    public const uint InvokeUnicode = 0x4000;
+
+    /// <summary>The <see cref="CommandInvokeInfo"/> holds where the command was chosen (<c>CMIC_MASK_PTINVOKE</c>).</summary>
+    public const uint InvokePoint = 0x20000000;
+
+    /// <summary>Asks <c>IContextMenu::GetCommandString</c> for a command's verb in UTF-16 (<c>GCS_VERBW</c>).</summary>
+    public const uint CommandStringVerb = 0x4;
+
+    /// <summary>Shows a window the command opens in its normal state (<c>SW_SHOWNORMAL</c>).</summary>
+    public const int ShowNormal = 1;
 
     /// <summary>
     /// Copies, moves, renames or deletes items; used here to delete to the Recycle Bin.
@@ -123,6 +141,45 @@ internal static unsafe partial class Shell32
     /// <returns>A pointer into <paramref name="idList"/>.</returns>
     [LibraryImport("shell32.dll")]
     public static partial nint ILFindLastID(nint idList);
+
+    /// <summary>
+    /// Copies an item ID list.
+    /// </summary>
+    /// <param name="idList">The ID list.</param>
+    /// <returns>The copy (free with <see cref="ILFree"/>), or zero.</returns>
+    [LibraryImport("shell32.dll")]
+    public static partial nint ILClone(nint idList);
+
+    /// <summary>
+    /// Removes the last item of an item ID list, in place, leaving its folder's.
+    /// </summary>
+    /// <param name="idList">The ID list.</param>
+    /// <returns><see langword="true"/> when an item was removed.</returns>
+    [LibraryImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ILRemoveLastID(nint idList);
+
+    /// <summary>
+    /// Determines whether an item ID list is the parent of another.
+    /// </summary>
+    /// <param name="parent">The possible parent.</param>
+    /// <param name="child">The possible child.</param>
+    /// <param name="immediate">Whether only the immediate parent counts.</param>
+    /// <returns><see langword="true"/> when <paramref name="parent"/> is the parent.</returns>
+    [LibraryImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ILIsParent(nint parent, nint child, [MarshalAs(UnmanagedType.Bool)] bool immediate);
+
+    /// <summary>
+    /// Gets the folder holding an item, as an interface such as <c>IShellFolder</c>.
+    /// </summary>
+    /// <param name="idList">The item's absolute ID list.</param>
+    /// <param name="interfaceId">The interface to return.</param>
+    /// <param name="folder">Receives the folder.</param>
+    /// <param name="lastId">Receives a pointer to the item's ID relative to the folder, inside <paramref name="idList"/>.</param>
+    /// <returns>An HRESULT.</returns>
+    [LibraryImport("shell32.dll")]
+    public static partial int SHBindToParent(nint idList, Guid* interfaceId, out nint folder, out nint lastId);
 
     /// <summary>
     /// Creates an <c>IDataObject</c> for shell items.
@@ -198,6 +255,62 @@ internal static unsafe partial class Shell32
 
         /// <summary>Unused.</summary>
         public char* ProgressTitle;
+    }
+
+    /// <summary>
+    /// The arguments of <c>IContextMenu::InvokeCommand</c> (<c>CMINVOKECOMMANDINFOEX</c>, natural alignment, as on
+    /// 64-bit Windows).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CommandInvokeInfo
+    {
+        /// <summary>The structure's size in bytes.</summary>
+        public uint Size;
+
+        /// <summary>Which optional members are set (<see cref="InvokeUnicode"/>, <see cref="InvokePoint"/>).</summary>
+        public uint Mask;
+
+        /// <summary>The window that owns any window the command shows.</summary>
+        public nint Window;
+
+        /// <summary>The command: its offset from the first command identifier, as an integer resource.</summary>
+        public nint Verb;
+
+        /// <summary>Unused.</summary>
+        public nint Parameters;
+
+        /// <summary>Unused.</summary>
+        public nint Directory;
+
+        /// <summary>How a window the command opens is shown (<see cref="ShowNormal"/>).</summary>
+        public int Show;
+
+        /// <summary>Unused.</summary>
+        public uint HotKey;
+
+        /// <summary>Unused.</summary>
+        public nint Icon;
+
+        /// <summary>Unused.</summary>
+        public nint Title;
+
+        /// <summary>The command, as for <see cref="Verb"/>.</summary>
+        public nint VerbW;
+
+        /// <summary>Unused.</summary>
+        public nint ParametersW;
+
+        /// <summary>Unused.</summary>
+        public nint DirectoryW;
+
+        /// <summary>Unused.</summary>
+        public nint TitleW;
+
+        /// <summary>The x coordinate, in screen pixels, where the command was chosen.</summary>
+        public int InvokeX;
+
+        /// <summary>The y coordinate, in screen pixels, where the command was chosen.</summary>
+        public int InvokeY;
     }
 
     /// <summary>

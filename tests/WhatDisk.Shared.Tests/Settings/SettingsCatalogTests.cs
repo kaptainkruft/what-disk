@@ -65,6 +65,9 @@ public sealed partial class SettingsCatalogTests
     {
         Assert.Equal("scanning.macos.showHiddenVolumes", SettingsCatalog.Scanning.ShowHiddenVolumes.Path);
         Assert.Equal("deleting.windows.warnWhenNotRecyclable", SettingsCatalog.Deleting.WarnWhenNotRecyclable.Path);
+        Assert.Equal("general.windows.systemContextMenu", SettingsCatalog.General.SystemContextMenu.Path);
+        Assert.False(SettingsCatalog.General.SystemContextMenu.AppliesTo(SettingPlatform.MacOS));
+        Assert.False(new AppSettings(TestPlatforms.Windows, null).Get(SettingsCatalog.General.SystemContextMenu));
         Assert.Equal("duplicates.sampleCount", SettingsCatalog.Duplicates.SampleCount.Path);
         Assert.True(SettingsCatalog.Scanning.ShowHiddenVolumes.AppliesTo(SettingPlatform.MacOS));
         Assert.False(SettingsCatalog.Scanning.ShowHiddenVolumes.AppliesTo(SettingPlatform.Windows));

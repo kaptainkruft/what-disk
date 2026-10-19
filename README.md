@@ -4,7 +4,7 @@ WhatDisk shows where the space on a disk has gone. It scans a volume or a folder
 
 While a scan runs, a narrow **Potential duplicate space** pane under the chart estimates, from sizes alone, how much space files over 1 MiB that share their size with another file take beyond one copy each, for the folder the chart shows. After a scan, **Tools › Find Duplicates in Scanned Files** (⇧⌘D, Ctrl+Shift+D) finds files with the same contents among everything scanned, and **Find Duplicates in Selection** (⌘D, Ctrl+D, also in the context menu) among the selected folders and files, compared as one set, so two suspect folders can be compared. Results are listed by set, ready to copy or export as CSV. Files up to 1 MiB are confirmed by hash; larger files are matched quickly by samples and can be verified by hash from the results, which open in a tab of their own. Double-click a file to show it in Finder or File Explorer.
 
-Settings (**WhatDisk › Settings…**, ⌘, on macOS; **Tools › Settings…**, Ctrl+, on Windows) covers appearance, size units, scanning, the duplicate search and delete confirmations. They are saved as JSON that holds only what differs from the defaults, in `~/Library/Application Support/WhatDisk/settings.json` on macOS and `%APPDATA%\WhatDisk\settings.json` on Windows.
+Settings (**WhatDisk › Settings…**, ⌘, on macOS; **Tools › Settings…**, Ctrl+, on Windows) covers appearance, size units, scanning, the duplicate search, delete confirmations and, on Windows, whether the context menu offers File Explorer's full menu (**Show More Options**, or Shift+right-click). They are saved as JSON that holds only what differs from the defaults, in `~/Library/Application Support/WhatDisk/settings.json` on macOS and `%APPDATA%\WhatDisk\settings.json` on Windows.
 
 It is a MacOS and Windows cross-platform .NET 10 / C# 14 application built with [Avalonia 12](https://avaloniaui.net/).
 
@@ -14,7 +14,7 @@ MIT; see [LICENSE](LICENSE).
 
 ## Requirements
 
-macOS 12 or later on Apple silicon or Intel to run the macOS version; Windows 10 or 11 on x64 or Arm64 to run the Windows version.
+macOS 12 or later on Apple silicon or Intel to run the macOS version; Windows 10 or 11 on x64 to run the Windows version.
 
 ## Notes for macOS users
 

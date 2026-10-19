@@ -1,3 +1,6 @@
+using Avalonia;
+using Avalonia.Controls;
+
 namespace WhatDisk.Platform;
 
 /// <summary>
@@ -69,6 +72,14 @@ public interface IShellService
     /// </summary>
     /// <param name="text">The text.</param>
     void CopyText(string text);
+
+    /// <summary>
+    /// Shows the system's own context menu for items, as the file manager does, and runs the command chosen from it.
+    /// Returns when the menu has closed.
+    /// </summary>
+    /// <param name="paths">The items, all in one folder.</param>
+    /// <param name="anchor">The window that owns the menu and where it opens.</param>
+    void ShowSystemMenu(IReadOnlyList<string> paths, SystemMenuAnchor anchor);
 }
 
 /// <summary>
@@ -103,6 +114,9 @@ public enum ShellCapabilities
 
     /// <summary><see cref="IShellService.CopyText"/>.</summary>
     CopyText = 1 << 7,
+
+    /// <summary><see cref="IShellService.ShowSystemMenu"/>.</summary>
+    SystemMenu = 1 << 8,
 }
 
 /// <summary>
@@ -112,3 +126,13 @@ public enum ShellCapabilities
 /// <param name="Path">The application's path.</param>
 /// <param name="IsDefault">Whether it is the default application for the item.</param>
 public sealed record ApplicationChoice(string Name, string Path, bool IsDefault);
+
+/// <summary>
+/// Where the system's context menu opens.
+/// </summary>
+/// <param name="Window">The window that owns the menu.</param>
+/// <param name="ScreenPosition">The menu's top-left corner, in physical screen pixels.</param>
+/// <param name="ExtendedVerbs">
+/// Whether the menu includes the commands normally shown only with Shift held, such as Copy as Path on Windows.
+/// </param>
+public sealed record SystemMenuAnchor(TopLevel Window, PixelPoint ScreenPosition, bool ExtendedVerbs);

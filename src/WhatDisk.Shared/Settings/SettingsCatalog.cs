@@ -35,7 +35,7 @@ public static class SettingsCatalog
     /// </summary>
     public static IReadOnlyList<SettingSection> Sections { get; } =
     [
-        new(GeneralKey, "General", "Appearance, how sizes are shown, and where the menus are.", [General.Theme, General.SizeUnits, General.UseMenuBar]),
+        new(GeneralKey, "General", "Appearance, how sizes are shown, and the menus.", [General.Theme, General.SizeUnits, General.UseMenuBar, General.SystemContextMenu]),
         new(
             ScanningKey,
             "Scanning",
@@ -92,6 +92,18 @@ public static class SettingsCatalog
             "Show the menus in the menu bar at the top of the screen, as Mac apps do. When off, they are drawn at the top of the window instead, with Quit, Settings and About in them. Takes effect the next time WhatDisk starts.",
             true,
             SettingPlatform.MacOS);
+
+        /// <summary>
+        /// Whether the tree's context menu ends with Show More Options, which opens the shell's own context menu for
+        /// the selected items, as File Explorer's menu does on Windows 11 (Windows). Read each time the menu opens.
+        /// </summary>
+        public static readonly BoolSetting SystemContextMenu = new(
+            GeneralKey,
+            "systemContextMenu",
+            "Offer the full Windows context menu",
+            "Adds Show More Options to the end of the context menu. It opens the menu File Explorer shows for the selected items, with the commands other apps add. Shift+right-click opens it directly.",
+            false,
+            SettingPlatform.Windows);
     }
 
     /// <summary>

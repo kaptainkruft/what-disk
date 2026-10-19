@@ -7,8 +7,8 @@ using WhatDisk.Windows.Interop;
 namespace WhatDisk.Windows;
 
 /// <summary>
-/// The Windows shell's actions on items: the Recycle Bin, Open With, File Explorer windows, Properties and the
-/// clipboard. Windows has no Quick Look, so previews are not offered.
+/// The Windows shell's actions on items: the Recycle Bin, Open With, File Explorer windows, Properties, the clipboard
+/// and File Explorer's context menu. Windows has no Quick Look, so previews are not offered.
 /// </summary>
 /// <param name="settings">
 /// The settings, which can turn off the warning before items that cannot be recycled are deleted permanently;
@@ -23,7 +23,7 @@ internal sealed unsafe class WindowsShellService(AppSettings? settings = null) :
     /// <inheritdoc/>
     public override ShellCapabilities Capabilities =>
         ShellCapabilities.Trash | ShellCapabilities.Open | ShellCapabilities.OpenWith | ShellCapabilities.Reveal
-        | ShellCapabilities.ShowInfo | ShellCapabilities.CopyItems | ShellCapabilities.CopyText;
+        | ShellCapabilities.ShowInfo | ShellCapabilities.CopyItems | ShellCapabilities.CopyText | ShellCapabilities.SystemMenu;
 
     /// <summary>
     /// Moves an item to the Recycle Bin. Items that cannot be recycled (on network shares, or larger than the Recycle
@@ -214,6 +214,19 @@ internal sealed unsafe class WindowsShellService(AppSettings? settings = null) :
     {
         ArgumentNullException.ThrowIfNull(text);
         WindowsClipboard.Set([(User32.UnicodeTextFormat, ClipboardFormats.BuildText(text))]);
+    }
+
+    /// <summary>
+    /// Shows File Explorer's context menu for the items (on Windows 11, the one under Show more options) and runs the
+    /// command chosen from it.
+    /// </summary>
+    /// <param name="paths">The items, all in one folder.</param>
+    /// <param name="anchor">The window that owns the menu and where it opens.</param>
+    public override void ShowSystemMenu(IReadOnlyList<string> paths, SystemMenuAnchor anchor)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(anchor);
+        WindowsContextMenu.Show(anchor.Window, paths, anchor.ScreenPosition, anchor.ExtendedVerbs);
     }
 
     /// <summary>

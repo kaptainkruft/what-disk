@@ -27,13 +27,13 @@ public sealed class WindowsShellServiceTests : IDisposable
     }
 
     /// <summary>
-    /// Windows offers everything except Quick Look.
+    /// Windows offers everything except Quick Look, including File Explorer's context menu.
     /// </summary>
     [Fact]
     public void Capabilities_OmitQuickLook()
     {
         Assert.False(_shell.Capabilities.HasFlag(ShellCapabilities.QuickLook));
-        Assert.True(_shell.Capabilities.HasFlag(ShellCapabilities.Trash | ShellCapabilities.Reveal | ShellCapabilities.ShowInfo | ShellCapabilities.OpenWith));
+        Assert.True(_shell.Capabilities.HasFlag(ShellCapabilities.Trash | ShellCapabilities.Reveal | ShellCapabilities.ShowInfo | ShellCapabilities.OpenWith | ShellCapabilities.SystemMenu));
     }
 
     /// <summary>

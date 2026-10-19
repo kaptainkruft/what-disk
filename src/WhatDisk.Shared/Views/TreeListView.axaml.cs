@@ -65,6 +65,21 @@ public partial class TreeListView : UserControl
     /// <summary>The context menu items that depend on a platform capability.</summary>
     private readonly List<(MenuItem Item, ShellCapabilities Capability)> _capabilityItems = [];
 
+    /// <summary>The context menu's Show More Options item, which opens the system's context menu.</summary>
+    private MenuItem? _systemMenuItem;
+
+    /// <summary>The separator before <see cref="_systemMenuItem"/>.</summary>
+    private Separator? _systemMenuSeparator;
+
+    /// <summary>
+    /// Where the context menu last opened, in physical screen pixels: at the pointer, or below the row for the
+    /// keyboard. The system's context menu opens there too.
+    /// </summary>
+    private PixelPoint _menuPosition;
+
+    /// <summary>The modifier keys held at the latest press or release of a pointer button on the list.</summary>
+    private KeyModifiers _pointerModifiers;
+
     /// <summary>The press that may start a drag, or <see langword="null"/>.</summary>
     private PointerPressedEventArgs? _pressArgs;
 
@@ -110,6 +125,8 @@ public partial class TreeListView : UserControl
         RowsList.AddHandler(PointerPressedEvent, OnRowsPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
         RowsList.AddHandler(PointerMovedEvent, OnRowsPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         RowsList.AddHandler(PointerReleasedEvent, OnRowsPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        // Tunnelling, so that Shift+right-click can open the system's menu before the list opens its own.
+        RowsList.AddHandler(ContextRequestedEvent, OnRowsContextRequested, RoutingStrategies.Tunnel);
         // Avalonia raises DragEnter rather than DragOver when the pointer moves onto a different element.
         RowsList.AddHandler(DragDrop.DragEnterEvent, OnRowsDragOver);
         RowsList.AddHandler(DragDrop.DragOverEvent, OnRowsDragOver);
@@ -135,6 +152,11 @@ public partial class TreeListView : UserControl
             : RowsList.ContainerFromItem(first);
         // Shown below the row rather than at the pointer; the placement returns to the pointer when the menu closes.
         menu.PlacementTarget = anchor;
+        if (anchor is not null)
+        {
+            _menuPosition = anchor.PointToScreen(new Point(0, anchor.Bounds.Height));
+        }
+
         menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
         menu.Open(RowsList);
         return true;
@@ -279,6 +301,11 @@ public partial class TreeListView : UserControl
         _capabilityItems.Clear();
         _openWithItem = new MenuItem { Header = "Open With" };
         _capabilityItems.Add((_openWithItem, ShellCapabilities.OpenWith));
+        _systemMenuSeparator = new Separator();
+        // Not bound to a command: the menu is still open while a command runs, and the system's menu is shown only
+        // once it has closed.
+        _systemMenuItem = new MenuItem { Header = "Show More Options" };
+        _systemMenuItem.Click += (_, _) => Dispatcher.UIThread.Post(() => ShowSystemMenu(extendedVerbs: false));
         var platform = viewModel.Platform;
         var keys = platform.Shortcuts;
         var menu = new ContextMenu
@@ -302,6 +329,8 @@ public partial class TreeListView : UserControl
                 new Separator(),
                 Item($"Move to {platform.TrashName}", viewModel.MoveToTrashCommand, keys.MoveToTrash, ShellCapabilities.Trash),
                 Item($"{platform.PermanentDeleteName}\u2026", viewModel.DeletePermanentlyCommand, keys.DeletePermanently),
+                _systemMenuSeparator,
+                _systemMenuItem,
             },
         };
         menu.Opening += OnContextMenuOpening;
@@ -332,7 +361,8 @@ public partial class TreeListView : UserControl
     private void OnContextMenuOpening(object? sender, CancelEventArgs e) => e.Cancel = !PrepareContextMenu();
 
     /// <summary>
-    /// Prepares the context menu: hides actions the platform lacks and lists the applications for Open With.
+    /// Prepares the context menu: hides actions the platform lacks, lists the applications for Open With, and offers
+    /// the system's menu when the setting is on.
     /// </summary>
     /// <returns><see langword="false"/> when nothing is selected, so the menu should not open.</returns>
     private bool PrepareContextMenu()
@@ -369,7 +399,56 @@ public partial class TreeListView : UserControl
             }
         }
 
+        var offered = viewModel.IsSystemMenuOffered;
+        _systemMenuSeparator?.IsVisible = offered;
+        if (_systemMenuItem is { } systemMenu)
+        {
+            systemMenu.IsVisible = offered;
+            systemMenu.IsEnabled = offered && viewModel.CanShowSystemMenu();
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// Remembers where a context menu requested with the pointer opens. When the system's menu is offered,
+    /// Shift+right-click opens it, with the commands Windows shows only with Shift held, instead of the list's own menu.
+    /// </summary>
+    /// <param name="sender">The list.</param>
+    /// <param name="e">The request.</param>
+    private void OnRowsContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        // A request from the keyboard has no position (OpenContextMenu records it); one from the pointer follows the
+        // button press or release, which recorded the modifier keys.
+        if (!e.TryGetPosition(RowsList, out var position))
+        {
+            return;
+        }
+
+        _menuPosition = RowsList.PointToScreen(position);
+        if (!_pointerModifiers.HasFlag(KeyModifiers.Shift) || _viewModel is not { IsSystemMenuOffered: true } viewModel)
+        {
+            return;
+        }
+
+        viewModel.IsTreeActive = true;
+        if (viewModel.CanShowSystemMenu())
+        {
+            e.Handled = true;
+            ShowSystemMenu(extendedVerbs: true);
+        }
+    }
+
+    /// <summary>
+    /// Shows the system's context menu for the selection where the list's menu last opened.
+    /// </summary>
+    /// <param name="extendedVerbs">Whether to include the commands Windows shows only with Shift held.</param>
+    private void ShowSystemMenu(bool extendedVerbs)
+    {
+        if (_viewModel is { } viewModel && TopLevel.GetTopLevel(this) is { } topLevel)
+        {
+            viewModel.ShowSystemMenu(new SystemMenuAnchor(topLevel, _menuPosition, extendedVerbs));
+        }
     }
 
     /// <inheritdoc/>
@@ -538,12 +617,14 @@ public partial class TreeListView : UserControl
     /// <summary>
     /// Remembers a press that may start a drag. Pressing a row of a multiple selection without modifiers keeps the
     /// selection (the press is handled before the list sees it), so the whole selection can be dragged; releasing
-    /// without dragging then selects just that row.
+    /// without dragging then selects just that row. The modifier keys are remembered for any button, for
+    /// Shift+right-click.
     /// </summary>
     /// <param name="sender">The list.</param>
     /// <param name="e">The event.</param>
     private void OnRowsPointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        _pointerModifiers = e.KeyModifiers;
         ResetPress();
         var point = e.GetCurrentPoint(RowsList);
         if (!point.Properties.IsLeftButtonPressed || RowFrom(e.Source) is not { } row || IsOnExpander(e.Source) || _viewModel is not { } viewModel)
@@ -607,12 +688,14 @@ public partial class TreeListView : UserControl
     }
 
     /// <summary>
-    /// Selects just the pressed row when a press on a multiple selection did not become a drag.
+    /// Selects just the pressed row when a press on a multiple selection did not become a drag. The modifier keys are
+    /// remembered, for Shift+right-click (Windows requests a context menu when the right button is released).
     /// </summary>
     /// <param name="sender">The list.</param>
     /// <param name="e">The event.</param>
     private void OnRowsPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        _pointerModifiers = e.KeyModifiers;
         if (_selectOnRelease && _pressRow is { } row && _viewModel is { } viewModel)
         {
             viewModel.SelectedRow = row;

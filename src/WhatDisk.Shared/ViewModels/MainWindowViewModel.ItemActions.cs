@@ -242,6 +242,35 @@ public sealed partial class MainWindowViewModel
     }
 
     /// <summary>
+    /// Gets a value indicating whether the context menu offers the system's own menu: the platform has one and the
+    /// setting to offer it is on. Read each time the menu opens, so a change applies at once.
+    /// </summary>
+    public bool IsSystemMenuOffered => Supports(ShellCapabilities.SystemMenu) && Settings.Get(SettingsCatalog.General.SystemContextMenu);
+
+    /// <summary>
+    /// Determines whether the system's context menu can be shown for the selection: it is offered, and the selected
+    /// items are all in one folder, as the system's menu requires.
+    /// </summary>
+    /// <returns><see langword="true"/> when it can be shown.</returns>
+    public bool CanShowSystemMenu() => IsSystemMenuOffered && HasActionableSelection() && AreInOneFolder(SelectedPaths());
+
+    /// <summary>
+    /// Shows the system's context menu for the selected items and runs the command chosen from it, reporting a failure
+    /// in the status bar. Returns when the menu has closed. Changes the command makes (deleting or renaming, say) show
+    /// after a rescan, as changes made in the file manager do.
+    /// </summary>
+    /// <param name="anchor">The window that owns the menu and where it opens.</param>
+    public void ShowSystemMenu(SystemMenuAnchor anchor)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        if (CanShowSystemMenu())
+        {
+            var paths = SelectedPaths();
+            RunShellAction("show the context menu", () => _shell.ShowSystemMenu(paths, anchor));
+        }
+    }
+
+    /// <summary>
     /// Selects every visible row.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanSelectAll))]
@@ -585,6 +614,17 @@ public sealed partial class MainWindowViewModel
     /// </summary>
     /// <returns>The paths.</returns>
     private List<string> SelectedPaths() => [.. Topmost(SelectedRows.Select(static row => row.Node)).Select(static node => node.FullPath)];
+
+    /// <summary>
+    /// Determines whether items are all in one folder. Items without a parent folder (drive roots) count as one folder,
+    /// the computer.
+    /// </summary>
+    /// <param name="paths">The items.</param>
+    /// <returns><see langword="true"/> when there is at least one item and they share their folder.</returns>
+    private bool AreInOneFolder(List<string> paths) =>
+        paths.Select(static path => Path.GetDirectoryName(PathUtilities.TrimTrailingSeparator(path)) ?? string.Empty)
+            .Distinct(StringComparer.FromComparison(Platform.PathComparison))
+            .Count() == 1;
 
     /// <summary>
     /// Keeps only the nodes that are not beneath another of the nodes, in their original order.

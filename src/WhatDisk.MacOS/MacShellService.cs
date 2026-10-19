@@ -164,6 +164,15 @@ internal sealed unsafe class MacShellService : IShellService
     }
 
     /// <summary>
+    /// Not offered: macOS has no public way for another app to show the Finder's context menu for an item.
+    /// </summary>
+    /// <param name="paths">The items.</param>
+    /// <param name="anchor">Where the menu would open.</param>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    public void ShowSystemMenu(IReadOnlyList<string> paths, SystemMenuAnchor anchor) =>
+        throw new NotSupportedException("The Finder's context menu is not available to other apps.");
+
+    /// <summary>
     /// Moves an item to the Trash with <c>-[NSFileManager trashItemAtURL:resultingItemURL:error:]</c>.
     /// </summary>
     /// <param name="path">The item.</param>

@@ -1,6 +1,6 @@
 ## Testing
 
-`dotnet test` runs 455 tests across three projects (on macOS, 35 Windows-only tests skip; on Windows, the macOS-only ones do).
+`dotnet test` runs 460 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
@@ -36,8 +36,9 @@
 - **Windows:** directory listings in all three layouts are built byte by byte and decoded, including every kind of
   reparse point, on any OS; so are paths, volume names, icon pixels and clipboard data. On Windows, the enumerator is
   compared with System.IO (including junctions, long paths and directories larger than one batch), and the volume
-  service, Recycle Bin, Open With, clipboard, icons and type names are exercised for real. Shared view tests run with
-  both platforms' shortcuts and words.
+  service, Recycle Bin, Open With, clipboard, File Explorer's context menu (built, not shown), icons and type names
+  are exercised for real. Shared view tests run with both platforms' shortcuts and words, including Show More Options
+  and Shift+right-click.
 - **macOS:** the native enumerator is compared with System.IO on real directories, including hard links, firmlinks
   and mount points at `/`. Other tests cover volume discovery and NSWorkspace icons on background threads. One test
   attaches a real disk image inside a scanned folder.

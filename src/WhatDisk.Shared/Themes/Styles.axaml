@@ -183,6 +183,15 @@
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
 
+  <!-- Duplicates window: the filter above the list -->
+  <Style Selector="DockPanel.duplicate-filter">
+    <Setter Property="Margin" Value="8,6" />
+  </Style>
+  <Style Selector="DockPanel.duplicate-filter TextBox">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="MinHeight" Value="28" />
+  </Style>
+
   <!-- Duplicates window: rows of each set share a shade, alternating from set to set -->
   <Style Selector="TextBlock.column-title">
     <Setter Property="FontSize" Value="12" />

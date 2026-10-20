@@ -58,6 +58,38 @@ public sealed class DuplicateResultsViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// The filter shows each set with a file that matches it, whole, and copying gives just those sets; with nothing
+    /// matching the list says so and Copy is disabled; clearing it shows everything again.
+    /// </summary>
+    [Fact]
+    public void Filter_ShowsTheSetsWithAMatchingFile()
+    {
+        var results = Create(Result());
+        Assert.Null(results.FilterSummary);
+        Assert.Equal(5, results.VisibleRows.Count);
+
+        results.FilterText = "/DATA/d";
+
+        Assert.Equal(["/data/d", "/data/e"], results.VisibleRows.Select(static row => row.Path));
+        Assert.Equal("1 of 2 sets", results.FilterSummary);
+        Assert.DoesNotContain("/data/a", results.Csv, StringComparison.Ordinal);
+        Assert.Contains("/data/e", results.Csv, StringComparison.Ordinal);
+
+        results.FilterText = "[bc]";
+        Assert.Equal(["/data/a", "/data/b", "/data/c"], results.VisibleRows.Select(static row => row.Path));
+
+        results.FilterText = "*.mov";
+        Assert.Empty(results.VisibleRows);
+        Assert.Equal("No files match “*.mov”.", results.ListHint);
+        Assert.False(results.CopyCsvCommand.CanExecute(null));
+        Assert.Equal("0 of 2 sets", results.FilterSummary);
+
+        results.FilterText = string.Empty;
+        Assert.Equal(results.Rows, results.VisibleRows);
+        Assert.True(results.CopyCsvCommand.CanExecute(null));
+    }
+
+    /// <summary>
     /// Failures are summarised, and the first few are listed with their reasons.
     /// </summary>
     [Fact]

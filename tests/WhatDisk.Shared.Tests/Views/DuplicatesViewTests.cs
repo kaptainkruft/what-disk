@@ -67,6 +67,40 @@ public sealed class DuplicatesViewTests
     }
 
     /// <summary>
+    /// The filter box sits just above the list; typing in it filters the list as it is typed, and Escape clears it.
+    /// </summary>
+    [AvaloniaFact]
+    public void FilterBox_FiltersTheList()
+    {
+        var results = Create(
+            new DuplicateSet(1, 734_003_200, null, ["/Users/me/Desktop/Holiday copy.mov", "/Users/me/Movies/Holiday.mov"], DuplicateComparison.Samples),
+            new DuplicateSet(2, 2_400_000, "3c59dc048e8850243be8079a5c74d079", ["/Users/me/Downloads/IMG_0042.HEIC", "/Users/me/Pictures/IMG_0042.HEIC"], DuplicateComparison.Hash));
+        var window = Host(results);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        var box = window.GetVisualDescendants().OfType<TextBox>().Single(static box => box.Name == "FilterBox");
+        var list = window.GetVisualDescendants().OfType<ListBox>().Single();
+        var header = window.GetVisualDescendants().OfType<Border>().Single(static border => border.Classes.Contains("tree-header"));
+        Assert.True(box.TranslatePoint(new Point(0, box.Bounds.Height), window)!.Value.Y <= header.TranslatePoint(default, window)!.Value.Y);
+
+        box.Focus();
+        window.KeyTextInput("*.heic");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("*.heic", results.FilterText);
+        Assert.Equal(2, list.ItemCount);
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), static text => text.Text == "1 of 2 sets");
+
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        window.KeyRelease(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(string.Empty, results.FilterText);
+        Assert.Equal(4, list.ItemCount);
+        window.Close();
+    }
+
+    /// <summary>
     /// Double-clicking a row shows its file in the file manager.
     /// </summary>
     [AvaloniaFact]

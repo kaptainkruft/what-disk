@@ -57,6 +57,9 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// <summary>Stops the running verification.</summary>
     private CancellationTokenSource? _verification;
 
+    /// <summary>Tests a file's path against the filter, or <see langword="null"/> when there is no filter.</summary>
+    private Func<string, bool>? _filter;
+
     /// <summary>The files of size-only sets hashed whole by sampled scans since the files were listed.</summary>
     private int _hashedFiles;
 
@@ -124,6 +127,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
         _host = host;
         _header = header;
         IsLive = host is not null;
+        Rows.CollectionChanged += (_, _) => UpdateVisibleRows();
         UpdateSummary();
     }
 
@@ -180,6 +184,36 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     public bool HasRows => Rows.Count > 0;
 
     /// <summary>
+    /// Gets the rows the filter lets through, as listed: every file of each set that has a file matching the filter,
+    /// so each file is still shown with its copies.
+    /// </summary>
+    public ObservableRangeList<DuplicateRowViewModel> VisibleRows { get; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether the list shows any file.
+    /// </summary>
+    public bool HasVisibleRows => VisibleRows.Count > 0;
+
+    /// <summary>
+    /// Gets or sets the filter: text that a file's path must contain, ignoring case, or a glob (<c>*</c>, <c>?</c>,
+    /// <c>[…]</c>) that must match its whole path or its name. A set is shown when any of its files matches.
+    /// </summary>
+    [ObservableProperty]
+    public partial string FilterText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets how many sets the filter shows, or <see langword="null"/> when there is no filter.
+    /// </summary>
+    public string? FilterSummary => _filter is null
+        ? null
+        : $"{DisplayFormat.Count(VisibleSets().Count())} of {DisplayFormat.Quantity(_sets.Count, "set", "sets")}";
+
+    /// <summary>
+    /// Gets what the list says when it shows nothing: why it is empty, or that no file matches the filter.
+    /// </summary>
+    public string ListHint => HasRows && _filter is not null ? $"No files match “{FilterText.Trim()}”." : EmptyHint;
+
+    /// <summary>
     /// Gets a value indicating whether any set is not confirmed by hash: it only matched on samples, or only on size.
     /// </summary>
     public bool HasUnconfirmedSets => _sets.Exists(static set => set.Comparison != DuplicateComparison.Hash);
@@ -199,12 +233,13 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// Gets what the list shows when it is empty.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ListHint))]
     public partial string EmptyHint { get; private set; } = string.Empty;
 
     /// <summary>
     /// Gets the results as CSV, as copied and exported.
     /// </summary>
-    public string Csv => DuplicateCsv.Format(_sets);
+    public string Csv => DuplicateCsv.Format(VisibleSets());
 
     /// <summary>
     /// Gets the file name suggested when exporting.
@@ -220,7 +255,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// Gets a value indicating whether there is anything to copy, the platform can copy text to the clipboard, and no
     /// scan or verification is changing the sets.
     /// </summary>
-    public bool CanCopy => HasRows && !IsBusy && (_shell.Capabilities & ShellCapabilities.CopyText) != 0;
+    public bool CanCopy => HasVisibleRows && !IsBusy && (_shell.Capabilities & ShellCapabilities.CopyText) != 0;
 
     /// <summary>
     /// Gets a value indicating whether files no longer than the small file limit are listed too.
@@ -328,7 +363,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
                 await WriteCsvAsync(stream);
             }
 
-            Message = $"Exported {DisplayFormat.Quantity(Rows.Count, "row", "rows")} to “{name}”.";
+            Message = $"Exported {DisplayFormat.Quantity(VisibleRows.Count, "row", "rows")} to “{name}”.";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
         {
@@ -631,7 +666,7 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
         try
         {
             _shell.CopyText(Csv);
-            Message = $"Copied {DisplayFormat.Quantity(Rows.Count, "row", "rows")} to the clipboard.";
+            Message = $"Copied {DisplayFormat.Quantity(VisibleRows.Count, "row", "rows")} to the clipboard.";
         }
         catch (Exception exception) when (exception is IOException or NotSupportedException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -945,6 +980,43 @@ public sealed partial class DuplicateResultsViewModel : TabViewModel
     /// </summary>
     /// <returns>One more than the largest set number shown.</returns>
     private int NextSetId() => _sets.Count == 0 ? 1 : _sets.Max(static set => set.Id) + 1;
+
+    /// <summary>
+    /// Applies a new filter to the list.
+    /// </summary>
+    /// <param name="value">The filter.</param>
+    partial void OnFilterTextChanged(string value)
+    {
+        _filter = DuplicateFilter.Create(value);
+        UpdateVisibleRows();
+    }
+
+    /// <summary>
+    /// Gets the sets the filter shows, in display order: those with a file that matches it, or all of them.
+    /// </summary>
+    /// <returns>The sets.</returns>
+    private IEnumerable<DuplicateSet> VisibleSets() => _filter is { } filter ? _sets.Where(set => set.Paths.Any(filter)) : _sets;
+
+    /// <summary>
+    /// Shows the rows of the sets the filter lets through, keeping the rows already shown so that the selection and
+    /// scroll position stay.
+    /// </summary>
+    private void UpdateVisibleRows()
+    {
+        IReadOnlyList<DuplicateRowViewModel> desired = Rows;
+        if (_filter is { } filter)
+        {
+            var shown = Rows.Where(row => filter(row.Path)).Select(static row => row.SetId).ToHashSet();
+            desired = [.. Rows.Where(row => shown.Contains(row.SetId))];
+        }
+
+        ListReconciler.Apply(VisibleRows, desired);
+        OnPropertyChanged(nameof(HasVisibleRows));
+        OnPropertyChanged(nameof(FilterSummary));
+        OnPropertyChanged(nameof(ListHint));
+        OnPropertyChanged(nameof(CanCopy));
+        CopyCsvCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>
     /// Makes the rows show the sets, keeping the row of each file already listed the same way (same size, size units,

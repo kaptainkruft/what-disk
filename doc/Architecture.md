@@ -224,7 +224,12 @@ between too many files. Files are opened for shared reading, so files other prog
 A file that cannot be read, or whose length changed since the scan, is reported in the results tab and left out.
 
 Sets are numbered by the space they waste (length × (copies − 1)), largest first. The results tab lists one row
-per file with its set, full path, size, hash and comparison, and shades every other set. Double-clicking a row shows
+per file with its set, full path, size, hash and comparison, and shades every other set. A filter box just above the
+list (`DuplicateFilter`) narrows it as you type: plain text must appear in a file's path, ignoring case (as `*text*`
+would), and a glob (`*`, `?`, `[abc]`, `[a-z]`, `[!abc]`) must match the whole path or the file's name, so `*.mov`,
+`IMG_*` and `*/Backup/*` all work. Each set with a matching file is shown whole, so every file still appears with
+its copies; the box says how many sets are shown, Escape clears it, and Copy CSV and Export CSV… take only the sets
+shown. Globs are matched with a non-backtracking regular expression, so no pattern can stall the window. Double-clicking a row shows
 the file in Finder or File Explorer. **Copy CSV** and **Export CSV…** produce the same RFC 4180 text: a header row
 (`SetID,Full Path,Size,Hash,Comparison`, the comparison being Hash, Sampled or Size), sizes in bytes, an empty hash
 for sampled and size-only files, quotes only where needed,

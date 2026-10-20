@@ -1,6 +1,6 @@
 ## Testing
 
-`dotnet test` runs 475 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
+`dotnet test` runs 499 tests across three projects (on macOS, 38 Windows-only tests skip; on Windows, the macOS-only ones do).
 
 - **Scan engine:** an in-memory file system drives aggregation, allocated sizes, partial failures, symbolic links,
   hard links, cancellation, mount points, firmlinks, virtual and network volumes, and a parallel stress test.
@@ -23,8 +23,9 @@
   carrying on without reading compared files again, a full hash scan straight from sizes, a new scan listing sizes
   again, and including smaller files only after the question. The size-only Potential duplicate space estimate is checked on built trees (groups, the
   space beyond one copy, what is left out, scope and cache invalidation) and on a real scan (selection, the minimum
-  length setting and deletes). Other tests cover the CSV quoting and the results tab, including a real
-  right-click on a row to verify its set, and that Copy and Export give the same CSV.
+  length setting and deletes). Other tests cover the filter (plain text and globs, whole sets shown, CSV of the
+  sets shown, typing and Escape in the box), the CSV quoting and the results tab, including a real right-click on a
+  row to verify its set, and that Copy and Export give the same CSV.
 - **Settings:** the settings file is checked for writing only differences from the defaults, putting platform
   settings in their subsection, and keeping other platforms' settings and unknown keys. Other tests cover comments,
   invalid values and invalid files, platform-dependent defaults, Reset, Restore Defaults and reloading after hand

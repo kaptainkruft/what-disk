@@ -48,11 +48,19 @@
     </Border>
 
     <!--
-      One row per file, set by set. Double-clicking a row shows the file in Finder or File Explorer; its context menu
-      hashes the row's set.
+      The filter, then one row per file, set by set. Double-clicking a row shows the file in Finder or File Explorer;
+      its context menu hashes the row's set.
     -->
-    <Grid RowDefinitions="Auto,*">
-      <Border Classes="tree-header" Height="30">
+    <Grid RowDefinitions="Auto,Auto,*">
+      <DockPanel Classes="duplicate-filter">
+        <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding FilterSummary}" VerticalAlignment="Center"
+                   Margin="10,0,0,0" IsVisible="{Binding FilterSummary, Converter={x:Static ObjectConverters.IsNotNull}}" />
+        <TextBox x:Name="FilterBox" Classes="clearButton" Text="{Binding FilterText}" KeyDown="OnFilterKeyDown"
+                 PlaceholderText="Filter: text in the path, or a glob such as *.mov or */Backup/*"
+                 ToolTip.Tip="Shows the sets with a file whose path contains the text (ignoring case), or whose path or name matches the glob (* any characters, ? one character, [abc] one of a set). Escape clears it." />
+      </DockPanel>
+
+      <Border Grid.Row="1" Classes="tree-header" Height="30">
         <Grid Classes="duplicate-columns" ColumnDefinitions="56,*,96,290,96">
           <TextBlock Classes="column-title number" Text="Set" />
           <TextBlock Grid.Column="1" Classes="column-title" Text="Full Path" />
@@ -62,7 +70,7 @@
         </Grid>
       </Border>
 
-      <ListBox x:Name="RowsList" Grid.Row="1" Classes="duplicates" ItemsSource="{Binding Rows}" DoubleTapped="OnRowsDoubleTapped">
+      <ListBox x:Name="RowsList" Grid.Row="2" Classes="duplicates" ItemsSource="{Binding VisibleRows}" DoubleTapped="OnRowsDoubleTapped">
         <ListBox.ContextMenu>
           <ContextMenu x:Name="RowMenu" Opening="OnRowMenuOpening">
             <MenuItem x:Name="VerifySetItem" Header="Verify Set by Hash" Command="{Binding VerifySetCommand}" />
@@ -82,8 +90,8 @@
         </ListBox.ItemTemplate>
       </ListBox>
 
-      <TextBlock x:Name="EmptyHintText" Grid.Row="1" Classes="empty-hint" Margin="24"
-                 Text="{Binding EmptyHint}" IsVisible="{Binding !HasRows}" />
+      <TextBlock x:Name="EmptyHintText" Grid.Row="2" Classes="empty-hint" Margin="24"
+                 Text="{Binding ListHint}" IsVisible="{Binding !HasVisibleRows}" />
     </Grid>
   </DockPanel>
 </UserControl>
